@@ -7,6 +7,9 @@
 
 #include "wsi/OsWindowingManager.hpp"
 
+#include <chrono>
+#include <etna/Sampler.hpp>
+
 
 class App
 {
@@ -28,4 +31,10 @@ private:
 
   std::unique_ptr<etna::Window> vkWindow;
   std::unique_ptr<etna::PerFrameCmdMgr> commandManager;
+
+  etna::ComputePipeline pipeline;
+  etna::Image image;
+  etna::Sampler defaultSampler;
+
+  std::chrono::system_clock::time_point timeStart;
 };
