@@ -8,6 +8,7 @@
 App::App()
   : resolution{1280, 720}
   , useVsync{true}
+  , timeStart{std::chrono::system_clock::now()}
 {
   // First, we need to initialize Vulkan, which is not trivial because
   // extensions are required for just about anything.
@@ -75,6 +76,15 @@ App::App()
 
 
   // TODO: Initialize any additional resources you require here!
+
+  etna::create_program("local_shadertoy", {LOCAL_SHADERTOY_SHADERS_ROOT "toy.comp.spv"});
+  pipeline = etna::get_context().getPipelineManager().createComputePipeline("local_shadertoy", {});
+  image = etna::get_context().createImage(etna::Image::CreateInfo {
+    .extent = vk::Extent3D{resolution.x, resolution.y, 1}, 
+    .name = "local_shadertoy",
+    .format = vk::Format::eR8G8B8A8Snorm,
+    .imageUsage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage
+    });
 }
 
 App::~App()
@@ -140,6 +150,43 @@ void App::drawFrame()
 
       // TODO: Record your commands here!
 
+      auto simpleComputeInfo = etna::get_shader_program("local_shadertoy");
+      
+      auto set = etna::create_descriptor_set(
+          simpleComputeInfo.getDescriptorLayoutId(0),
+          currentCmdBuf,
+          {
+              //etna::Binding{0, bufA.genBinding()},
+              etna::Binding{0, image.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)}
+          });
+
+      vk::DescriptorSet vkSet = set.getVkSet();
+
+      currentCmdBuf.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline.getVkPipeline());
+      currentCmdBuf.bindDescriptorSets(
+        vk::PipelineBindPoint::eCompute, pipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, nullptr);
+
+      float time = std::chrono::duration<float>(std::chrono::system_clock::now() - timeStart).count();
+
+      currentCmdBuf.pushConstants(
+        pipeline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(time), &time);
+
+      etna::flush_barriers(currentCmdBuf);
+
+      currentCmdBuf.dispatch(resolution.x / 32, resolution.y / 32, 1);
+
+      vk::ImageBlit Blit{
+          {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        std::array{vk::Offset3D(0, 0, 0), vk::Offset3D(resolution.x, resolution.y, 1)},
+          {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        std::array{vk::Offset3D(0, 0, 0), vk::Offset3D(resolution.x, resolution.y, 1)}};
+      currentCmdBuf.blitImage(
+          image.get(),
+          vk::ImageLayout::eTransferSrcOptimal,
+          backbuffer,
+          vk::ImageLayout::eTransferDstOptimal,
+          Blit,
+          vk::Filter::eLinear);
 
       // At the end of "rendering", we are required to change how the pixels of the
       // swpchain image are laid out in memory to something that is appropriate
