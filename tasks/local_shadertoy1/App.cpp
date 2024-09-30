@@ -157,7 +157,7 @@ void App::drawFrame()
           currentCmdBuf,
           {
               //etna::Binding{0, bufA.genBinding()},
-              etna::Binding{0, image.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)}
+         etna::Binding{0, image.genBinding(defaultSampler.get(), vk::ImageLayout::eGeneral)}
           });
 
       vk::DescriptorSet vkSet = set.getVkSet();
@@ -173,7 +173,7 @@ void App::drawFrame()
 
       etna::flush_barriers(currentCmdBuf);
 
-      currentCmdBuf.dispatch(resolution.x / 32, resolution.y / 32, 1);
+      currentCmdBuf.dispatch(resolution.x / 16, resolution.y / 16, 1);
 
       vk::ImageBlit Blit{
           {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
@@ -182,7 +182,7 @@ void App::drawFrame()
         std::array{vk::Offset3D(0, 0, 0), vk::Offset3D(resolution.x, resolution.y, 1)}};
       currentCmdBuf.blitImage(
           image.get(),
-          vk::ImageLayout::eTransferSrcOptimal,
+          vk::ImageLayout::eGeneral,
           backbuffer,
           vk::ImageLayout::eTransferDstOptimal,
           Blit,
