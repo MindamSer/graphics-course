@@ -1,0 +1,32 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0, rgba8) uniform image2D resultImage;
+
+layout(push_constant) uniform params
+{
+  uvec2 iResolution;
+  float iTime;
+};
+
+
+
+float PI = 3.14159265358979323846;
+
+
+
+void main()
+{
+  ivec2 fragCoord = ivec2(gl_GlobalInvocationID.xy);
+
+  vec2 uv = (vec2(fragCoord).xy * 2 - vec2(iResolution).xy) / iResolution.x;
+  
+  float rd = pow(sin((pow(uv.x*uv.x + uv.y*uv.y, 0.5)) * 10. + iTime * PI), 2);
+  float gr = pow(sin((pow(uv.x*uv.x + uv.y*uv.y, 0.5)) * 10. - iTime * PI), 2);
+  float bl = pow(sin(atan(uv.y/uv.x) + iTime * PI), 2.);
+  vec4 fragColor = vec4(rd, gr, bl, 1.);
+  
+  if (fragCoord.x < 1280 && fragCoord.y < 720)
+    imageStore(resultImage, fragCoord, fragColor);
+}

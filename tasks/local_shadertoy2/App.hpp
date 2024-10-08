@@ -3,6 +3,7 @@
 #include <etna/Window.hpp>
 #include <etna/PerFrameCmdMgr.hpp>
 #include <etna/ComputePipeline.hpp>
+#include <etna/GraphicsPipeline.hpp>
 #include <etna/Image.hpp>
 
 #include "wsi/OsWindowingManager.hpp"
@@ -32,9 +33,11 @@ private:
   std::unique_ptr<etna::Window> vkWindow;
   std::unique_ptr<etna::PerFrameCmdMgr> commandManager;
 
-  etna::ComputePipeline pipeline;
-  etna::Image image;
-  etna::Sampler defaultSampler;
+  etna::ComputePipeline texturePipeline;
+  etna::Image textureImage;
+  etna::Sampler textureSampler;
+
+  etna::GraphicsPipeline shaderPipeline;
 
   std::chrono::system_clock::time_point timeStart;
 };
