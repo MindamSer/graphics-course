@@ -4,6 +4,7 @@
 layout(location = 0) out vec4 fragColor;
 
 layout(binding = 0) uniform sampler2D colorTex;
+layout(binding = 1) uniform sampler2D fileTex;
 
 layout(push_constant) uniform params
 {
@@ -246,10 +247,14 @@ void main()
         vec3 n = getNormal(p);
         vec3 w = abs(n);
         
-        vec3 texel =
-            w.x * textureLod(colorTex, vec2(0.5) + 4.0 * p.yz, 0).rgb +
-            w.y * textureLod(colorTex, vec2(0.5) + 4.0 * p.xz, 0).rgb +
-            w.z * textureLod(colorTex, vec2(0.5) + 4.0 * p.xy, 0).rgb;
+        vec3 texel1 =
+            w.x * textureLod(colorTex, vec2(0.5) + 1.5 * p.yz, 0).rgb +
+            w.y * textureLod(colorTex, vec2(0.5) + 1.5 * p.xz, 0).rgb +
+            w.z * textureLod(colorTex, vec2(0.5) + 1.5 * p.xy, 0).rgb;
+		vec3 texel2 =
+            w.x * textureLod(fileTex, vec2(0.5) + 0.35 * p.yz, 0).rgb +
+            w.y * textureLod(fileTex, vec2(0.5) + 0.35 * p.xz, 0).rgb +
+            w.z * textureLod(fileTex, vec2(0.5) + 0.35 * p.xy, 0).rgb;
         
         vec3 hc = normalize(frameCameraPos - p);
         for (int i = 0; i < lightCount; i++)
@@ -260,7 +265,7 @@ void main()
             color = color + (0.1 + 0.45 * brightness + 0.45 * blick) * ligths[i].col;
         }
         
-        color =  color * vec4(texel, 1.0);
+        color =  color * vec4(texel1, 1.0) * vec4(texel2, 1.0);
     }
 
     fragColor = color;

@@ -5,6 +5,8 @@
 #include <etna/PipelineManager.hpp>
 #include <etna/RenderTargetStates.hpp>
 
+#include "stb_image.h"
+
 
 App::App()
   : resolution{1280, 720}
@@ -79,7 +81,7 @@ App::App()
   // TODO: Initialize any additional resources you require here!
 
 
-  // --- Texture Init ---
+  // --- Procedural Texture Init ---
 
   etna::create_program(
     "procedural_texture", 
@@ -96,6 +98,35 @@ App::App()
 
   textureSampler = etna::Sampler::Sampler(etna::Sampler::CreateInfo{
     .addressMode = vk::SamplerAddressMode::eRepeat, .name = "textureSampler"});
+
+
+  // --- Texture Init ---
+
+  int width, height, channels;
+  unsigned char* image_data = stbi_load(
+    GRAPHICS_COURSE_RESOURCES_ROOT "/textures/test_tex_1.png", &width, &height, &channels, 4);
+
+  fileTextureImage = etna::get_context().createImage(etna::Image::CreateInfo{
+    .extent = vk::Extent3D{static_cast<unsigned>(width), static_cast<unsigned>(height), 1},
+    .name = "file_texture",
+    .format = vk::Format::eR8G8B8A8Unorm,
+    .imageUsage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage |
+      vk::ImageUsageFlagBits::eTransferDst});
+
+  fileTextureSampler = etna::Sampler::Sampler(etna::Sampler::CreateInfo{
+    .addressMode = vk::SamplerAddressMode::eRepeat, .name = "fileTextureSampler"});
+
+  transferHelper =
+    std::make_unique<etna::BlockingTransferHelper>(etna::BlockingTransferHelper::CreateInfo{
+      .stagingSize = static_cast<std::uint32_t>(width * height),
+    });
+
+  std::unique_ptr<etna::OneShotCmdMgr> OneShotCommands = etna::get_context().createOneShotCmdMgr();
+
+  transferHelper->uploadImage(*OneShotCommands, fileTextureImage, 0, 0,
+      std::span<const std::byte>(reinterpret_cast<const std::byte*>(image_data), width * height * 4));
+
+  stbi_image_free(image_data);
 
 
   // --- Shader Init ---
@@ -238,7 +269,8 @@ void App::drawFrame()
           graphicsInfo.getDescriptorLayoutId(0),
           currentCmdBuf,
           {
-                etna::Binding{0, textureImage.genBinding(textureSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)}
+                etna::Binding{0, textureImage.genBinding(textureSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+                etna::Binding{1, fileTextureImage.genBinding(fileTextureSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)}
           });
 
         vk::DescriptorSet vkSet = set.getVkSet();

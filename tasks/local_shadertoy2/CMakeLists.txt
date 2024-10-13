@@ -5,7 +5,7 @@ add_executable(local_shadertoy_2
 )
 
 target_link_libraries(local_shadertoy_2
-  PRIVATE glfw etna glm::glm wsi gui)
+  PRIVATE glfw etna glm::glm wsi gui scene)
 
 target_add_shaders(local_shadertoy_2
   shaders/main_shader.frag

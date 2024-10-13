@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <etna/Sampler.hpp>
+#include <etna/BlockingTransferHelper.hpp>
 
 
 class App
@@ -36,6 +37,10 @@ private:
   etna::ComputePipeline texturePipeline;
   etna::Image textureImage;
   etna::Sampler textureSampler;
+
+  std::unique_ptr<etna::BlockingTransferHelper> transferHelper;
+  etna::Image fileTextureImage;
+  etna::Sampler fileTextureSampler;
 
   etna::GraphicsPipeline shaderPipeline;
 
