@@ -24,7 +24,7 @@ const float PI = 3.141592;
 
 // render consts
 const int MAX_ITER = 1500;
-const float MAX_DIST = 1e6;
+const float MAX_DIST = 1e64;
 const float STEP_EPS = 1e-3;
 const float H = 1e-2;
 const float BLICK_POW = 5e1;

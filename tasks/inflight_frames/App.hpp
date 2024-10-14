@@ -45,7 +45,9 @@ private:
 
   etna::GraphicsPipeline shaderPipeline;
 
-  etna::Buffer constantsBuffer;
+  std::vector<etna::Buffer> constantsBuffers;
+  unsigned cur_frame;
+
   std::chrono::system_clock::time_point timeStart;
 };
 

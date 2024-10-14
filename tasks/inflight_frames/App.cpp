@@ -42,7 +42,7 @@ App::App()
       .deviceExtensions = deviceExtensions,
       // Replace with an index if etna detects your preferred GPU incorrectly
       .physicalDeviceIndexOverride = {},
-      .numFramesInFlight = 1,
+      .numFramesInFlight = 3,
     });
   }
 
@@ -132,17 +132,20 @@ App::App()
   stbi_image_free(image_data);
 
 
-  // --- Constants Buffer Init ---
+  // --- Constants Buffers Init ---
 
-  constantsBuffer = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = sizeof(Params),
-    .bufferUsage = vk::BufferUsageFlagBits::eUniformBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY, //VMA_MEMORY_USAGE_CPU_TO_GPU
-    .name = "constants_buffer",
-  });
+  cur_frame = 0;
 
-  constantsBuffer.map();
-
+  for (int i = 0; i < 3; ++i)
+  {
+    constantsBuffers.push_back(etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+      .size = sizeof(Params),
+      .bufferUsage = vk::BufferUsageFlagBits::eUniformBuffer,
+      .memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY,
+      .name = "constants_buffer",
+    }));
+    constantsBuffers[i].map();
+  }
 
   // --- Shader Init ---
 
@@ -239,7 +242,7 @@ void App::drawFrame()
           .iMouse = osWindow->mouse.freePos, 
           .iTime = time
       };
-      std::memcpy(constantsBuffer.data(), &param, sizeof(param));
+      std::memcpy(constantsBuffers[cur_frame % 3].data(), &param, sizeof(param));
 
 
       // --- Texture ---
@@ -252,7 +255,7 @@ void App::drawFrame()
           currentCmdBuf,
           {
                 etna::Binding{0, textureImage.genBinding({}, vk::ImageLayout::eGeneral)},
-                etna::Binding{1, constantsBuffer.genBinding()}
+                etna::Binding{1, constantsBuffers[cur_frame % 3].genBinding()}
           });
 
         vk::DescriptorSet vkSet = set.getVkSet();
@@ -295,7 +298,7 @@ void App::drawFrame()
           {
                 etna::Binding{0, textureImage.genBinding(textureSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
                 etna::Binding{1, fileTextureImage.genBinding(fileTextureSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-                etna::Binding{2, constantsBuffer.genBinding()}
+                etna::Binding{2, constantsBuffers[cur_frame % 3].genBinding()}
           });
 
         vk::DescriptorSet vkSet = set.getVkSet();
@@ -324,6 +327,8 @@ void App::drawFrame()
       etna::flush_barriers(currentCmdBuf);
 
       std::this_thread::sleep_for(std::chrono::milliseconds(7));
+
+      ++cur_frame;
 
       ETNA_READ_BACK_GPU_PROFILING(currentCmdBuf);
     }
