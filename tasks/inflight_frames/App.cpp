@@ -6,6 +6,9 @@
 #include <etna/RenderTargetStates.hpp>
 
 #include "stb_image.h"
+#include <tracy/Tracy.hpp>
+#include <etna/Profiling.hpp>
+#include <chrono>
 
 
 App::App()
@@ -129,6 +132,18 @@ App::App()
   stbi_image_free(image_data);
 
 
+  // --- Constants Buffer Init ---
+
+  constantsBuffer = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = sizeof(Params),
+    .bufferUsage = vk::BufferUsageFlagBits::eUniformBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY, //VMA_MEMORY_USAGE_CPU_TO_GPU
+    .name = "constants_buffer",
+  });
+
+  constantsBuffer.map();
+
+
   // --- Shader Init ---
 
   etna::create_program(
@@ -157,6 +172,7 @@ void App::run()
 {
   while (!osWindow->isBeingClosed())
   {
+    ZoneScopedN("tick");
     windowing.poll();
 
     drawFrame();
@@ -169,6 +185,8 @@ void App::run()
 
 void App::drawFrame()
 {
+  ZoneScopedN("draw_func");
+
   // First, get a command buffer to write GPU commands into.
   auto currentCmdBuf = commandManager->acquireNext();
 
@@ -180,12 +198,16 @@ void App::drawFrame()
 
   // When window is minimized, we can't render anything in Windows
   // because it kills the swapchain, so we skip frames in this case.
+
   if (nextSwapchainImage)
   {
+    ZoneScopedN("swapchain_good");
     auto [backbuffer, backbufferView, backbufferAvailableSem] = *nextSwapchainImage;
 
     ETNA_CHECK_VK_RESULT(currentCmdBuf.begin(vk::CommandBufferBeginInfo{}));
     {
+      ETNA_PROFILE_GPU(currentCmdBuf, renderFrame);
+
       // First of all, we need to "initialize" th "backbuffer", aka the current swapchain
       // image, into a state that is appropriate for us working with it. The initial state
       // is considered to be "undefined" (aka "I contain trash memory"), by the way.
@@ -212,16 +234,25 @@ void App::drawFrame()
       float time =
         std::chrono::duration<float>(std::chrono::system_clock::now() - timeStart).count();
 
+      Params param{
+          .iResolution = resolution, 
+          .iMouse = osWindow->mouse.freePos, 
+          .iTime = time
+      };
+      std::memcpy(constantsBuffer.data(), &param, sizeof(param));
+
 
       // --- Texture ---
       {
+        ZoneScopedN("creating_compute_shader");
         auto computeInfo = etna::get_shader_program("procedural_texture");
 
         auto set = etna::create_descriptor_set(
           computeInfo.getDescriptorLayoutId(0),
           currentCmdBuf,
           {
-                etna::Binding{0, textureImage.genBinding({}, vk::ImageLayout::eGeneral)}
+                etna::Binding{0, textureImage.genBinding({}, vk::ImageLayout::eGeneral)},
+                etna::Binding{1, constantsBuffer.genBinding()}
           });
 
         vk::DescriptorSet vkSet = set.getVkSet();
@@ -230,15 +261,6 @@ void App::drawFrame()
         currentCmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, texturePipeline.getVkPipelineLayout(),
           0, 1, &vkSet, 0, nullptr);
 
-        struct Params
-        {
-          glm::uvec2 res;
-          float time;
-        };
-        Params param{
-            .res = resolution, 
-            .time = time
-        };
         currentCmdBuf.pushConstants( texturePipeline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(param), &param);
 
         etna::flush_barriers(currentCmdBuf);
@@ -260,6 +282,8 @@ void App::drawFrame()
 
       // --- Drawing ---
       {
+        ZoneScopedN("creating_graphic_shader");
+
         etna::RenderTargetState state{currentCmdBuf, {{}, {resolution.x, resolution.y}}, 
             {{backbuffer, backbufferView}}, {}};
 
@@ -270,7 +294,8 @@ void App::drawFrame()
           currentCmdBuf,
           {
                 etna::Binding{0, textureImage.genBinding(textureSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-                etna::Binding{1, fileTextureImage.genBinding(fileTextureSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)}
+                etna::Binding{1, fileTextureImage.genBinding(fileTextureSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+                etna::Binding{2, constantsBuffer.genBinding()}
           });
 
         vk::DescriptorSet vkSet = set.getVkSet();
@@ -279,18 +304,6 @@ void App::drawFrame()
         currentCmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, shaderPipeline.getVkPipelineLayout(),
           0, 1, &vkSet, 0, nullptr);
 
-        struct Params
-        {
-          glm::uvec2 res;
-          glm::uvec2 mouse;
-          float time;
-        };
-        Params param
-        {
-          .res = resolution, 
-          .mouse = osWindow->mouse.freePos, 
-          .time = time
-        };
         currentCmdBuf.pushConstants(shaderPipeline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(param), &param);
 
         currentCmdBuf.draw(3, 1, 0, 0);
@@ -309,6 +322,10 @@ void App::drawFrame()
         vk::ImageAspectFlagBits::eColor);
       // And of course flush the layout transition.
       etna::flush_barriers(currentCmdBuf);
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(7));
+
+      ETNA_READ_BACK_GPU_PROFILING(currentCmdBuf);
     }
     ETNA_CHECK_VK_RESULT(currentCmdBuf.end());
 

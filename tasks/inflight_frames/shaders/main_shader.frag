@@ -1,16 +1,20 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-layout(location = 0) out vec4 fragColor;
-
-layout(binding = 0) uniform sampler2D colorTex;
-layout(binding = 1) uniform sampler2D fileTex;
-
-layout(push_constant) uniform params
+struct Params
 {
   uvec2 iResolution;
   uvec2 iMouse;
   float iTime;
+};
+
+layout(location = 0) out vec4 fragColor;
+
+layout(binding = 0) uniform sampler2D colorTex;
+layout(binding = 1) uniform sampler2D fileTex;
+layout(binding = 2, set = 0) uniform AppData
+{
+  Params params;
 };
 
 
@@ -19,8 +23,8 @@ layout(push_constant) uniform params
 const float PI = 3.141592;
 
 // render consts
-const int MAX_ITER = 200;
-const float MAX_DIST = 1e2;
+const int MAX_ITER = 1500;
+const float MAX_DIST = 1e6;
 const float STEP_EPS = 1e-3;
 const float H = 1e-2;
 const float BLICK_POW = 5e1;
@@ -94,7 +98,7 @@ float opSmoothUnion( float d1, float d2, float k )
 
 float sdCore(vec3 p, vec3 cent)
 {
-    p = rotateAxis(normalize(vec3(1., 1., 1.)), PI * CORE_OMEGA * iTime) * p;
+    p = rotateAxis(normalize(vec3(1., 1., 1.)), PI * CORE_OMEGA * params.iTime) * p;
     int nucleonCount = 12;
     
     vec3[] nucleons = vec3[] (
@@ -118,12 +122,12 @@ float sdOrbiltals(vec3 p, vec3 cent)
 {
     int electronCount = 6;
     vec3[] electrons = vec3[] (
-    rotateAxis(normalize(vec3(-3., 2., 0.)), PI * ELECTRON_OMEGA * iTime * 1.05) * ELECTRON_OFFSET * normalize(vec3(2., 3., 0.)),
-    rotateAxis(normalize(vec3(3., 2., 0.)), PI * ELECTRON_OMEGA * iTime * 1.07) * ELECTRON_OFFSET * normalize(vec3(-2., 3., 0.)),
-    rotateAxis(normalize(vec3(0., -3., 2.)), PI * ELECTRON_OMEGA * iTime * 1.11) * ELECTRON_OFFSET * normalize(vec3(0., 2., 3.)),
-    rotateAxis(normalize(vec3(0., 3., 2.)), PI * ELECTRON_OMEGA * iTime * 1.13) * ELECTRON_OFFSET * normalize(vec3(0., -2., 3.)),
-    rotateAxis(normalize(vec3(-3., 0., 2.)), PI * ELECTRON_OMEGA * iTime * 1.17) * ELECTRON_OFFSET * normalize(vec3(2., 0., 3.)),
-    rotateAxis(normalize(vec3(3., 0., 2.)), PI * ELECTRON_OMEGA * iTime * 1.19) * ELECTRON_OFFSET * normalize(vec3(-2., 0., 3.))
+    rotateAxis(normalize(vec3(-3., 2., 0.)), PI * ELECTRON_OMEGA * params.iTime * 1.05) * ELECTRON_OFFSET * normalize(vec3(2., 3., 0.)),
+    rotateAxis(normalize(vec3(3., 2., 0.)), PI * ELECTRON_OMEGA * params.iTime * 1.07) * ELECTRON_OFFSET * normalize(vec3(-2., 3., 0.)),
+    rotateAxis(normalize(vec3(0., -3., 2.)), PI * ELECTRON_OMEGA * params.iTime * 1.11) * ELECTRON_OFFSET * normalize(vec3(0., 2., 3.)),
+    rotateAxis(normalize(vec3(0., 3., 2.)), PI * ELECTRON_OMEGA * params.iTime * 1.13) * ELECTRON_OFFSET * normalize(vec3(0., -2., 3.)),
+    rotateAxis(normalize(vec3(-3., 0., 2.)), PI * ELECTRON_OMEGA * params.iTime * 1.17) * ELECTRON_OFFSET * normalize(vec3(2., 0., 3.)),
+    rotateAxis(normalize(vec3(3., 0., 2.)), PI * ELECTRON_OMEGA * params.iTime * 1.19) * ELECTRON_OFFSET * normalize(vec3(-2., 0., 3.))
     );
     
     float res = sdSphere(p - (cent + electrons[0]), ELECTRON_SIZE);
@@ -168,7 +172,7 @@ vec3 trace(in vec3 start, in vec3 dir, out bool hit)
     for (int i = 0; i < MAX_ITER; ++i)
     {
         p = start + dir * t;
-        d = sceneSDF(p);
+        d = sceneSDF(p) * 0.1;
         t += d;
         
         if (d < STEP_EPS || t > MAX_DIST) break;
@@ -215,7 +219,7 @@ light(vec3(0., -4., -3.), vec4(0., 1., 1., 1.))
 void main()
 {
     // angle of camera
-    vec2 mouseTheta = PI * (vec2(iMouse).xy * 2. - vec2(iResolution).xy) / iResolution.x;
+    vec2 mouseTheta = PI * (vec2(params.iMouse).xy * 2. - vec2(params.iResolution).xy) / params.iResolution.x;
     float phi = mouseTheta.x;
     float theta = mouseTheta.y;
     
@@ -230,7 +234,7 @@ void main()
     float cameraDepth = 1. / tan(radians(mainCam.fov / 2.));
     
     // computing ray direction
-    vec2 uv = (vec2(gl_FragCoord).xy * 2. - vec2(iResolution).xy) / iResolution.x;
+    vec2 uv = (vec2(gl_FragCoord).xy * 2. - vec2(params.iResolution).xy) / params.iResolution.x;
     vec3 rayDir = normalize(frameCameraDir * cameraDepth + frameCameraRight * uv.x + frameCameraUp * uv.y);
     
 	// vec4 color = textureLod(colorTex, vec2(0.5) + 4.0 * uv, 0).rgba;

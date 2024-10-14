@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <etna/Sampler.hpp>
+#include <etna/Buffer.hpp>
 #include <etna/BlockingTransferHelper.hpp>
 
 
@@ -44,5 +45,13 @@ private:
 
   etna::GraphicsPipeline shaderPipeline;
 
+  etna::Buffer constantsBuffer;
   std::chrono::system_clock::time_point timeStart;
+};
+
+struct Params
+{
+  glm::uvec2 iResolution;
+  glm::uvec2 iMouse;
+  float iTime;
 };
