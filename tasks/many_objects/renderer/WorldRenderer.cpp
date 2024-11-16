@@ -29,6 +29,9 @@ void WorldRenderer::allocateResources(glm::uvec2 swapchain_resolution)
 void WorldRenderer::loadScene(std::filesystem::path path)
 {
   sceneMgr->selectScene(path);
+
+  pushConstMC.instanceCount = static_cast<std::uint32_t>(sceneMgr->getInstanceMatrices().size());
+  pushConstMC.relemCount = static_cast<std::uint32_t>(sceneMgr->getRenderElements().size());
 }
 
 void WorldRenderer::loadShaders()
@@ -38,6 +41,7 @@ void WorldRenderer::loadShaders()
     {MANY_OBJECTS_RENDERER_SHADERS_ROOT "static_mesh.frag.spv",
      MANY_OBJECTS_RENDERER_SHADERS_ROOT "static_mesh.vert.spv"});
   etna::create_program("static_mesh", {MANY_OBJECTS_RENDERER_SHADERS_ROOT "static_mesh.vert.spv"});
+  etna::create_program("culling_shader", {MANY_OBJECTS_RENDERER_SHADERS_ROOT "gpu_culling.comp.spv"});
 }
 
 void WorldRenderer::setupPipelines(vk::Format swapchain_format)
@@ -68,6 +72,8 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
           .depthAttachmentFormat = vk::Format::eD32Sfloat,
         },
     });
+
+  cullingPipeline = pipelineManager.createComputePipeline("culling_shader", {});
 }
 
 void WorldRenderer::debugInput(const Keyboard&) {}
@@ -83,39 +89,74 @@ void WorldRenderer::update(const FramePacket& packet)
   }
 }
 
+void WorldRenderer::cullScene(vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
+{
+  auto simpleComputeInfo = etna::get_shader_program("culling_shader");
+
+  auto set = etna::create_descriptor_set(
+    simpleComputeInfo.getDescriptorLayoutId(0),
+    cmd_buf,
+    {
+      etna::Binding{0, sceneMgr->getRelemBoxBuffer()->genBinding()},
+      etna::Binding{1, sceneMgr->getMeshBuffer()->genBinding()},
+      etna::Binding{2, sceneMgr->getMatricesBuffer()->genBinding()},
+      etna::Binding{3, sceneMgr->getIMeshesBuffer()->genBinding()},
+      etna::Binding{4, sceneMgr->getDrawCmdBuffer()->genBinding()},
+      etna::Binding{5, sceneMgr->getDrawMatricesIndBuffer()->genBinding()},
+      etna::Binding{6, sceneMgr->getMatricesOffsetsIndBuffer()->genBinding()},
+    });
+
+  vk::DescriptorSet vkSet = set.getVkSet();
+
+  cmd_buf.bindPipeline(vk::PipelineBindPoint::eCompute, cullingPipeline.getVkPipeline());
+
+  cmd_buf.bindDescriptorSets(
+    vk::PipelineBindPoint::eCompute, pipeline_layout, 
+    0, 1, &vkSet, 0, nullptr);
+
+  cmd_buf.pushConstants(
+    pipeline_layout, vk::ShaderStageFlagBits::eCompute, 
+    0, sizeof(PushConstants), &pushConstMC);
+
+  etna::flush_barriers(cmd_buf);
+
+  cmd_buf.dispatch((pushConstMC.instanceCount + 255) / 256, 1, 1);
+}
+
 void WorldRenderer::renderScene(
-  vk::CommandBuffer cmd_buf, const glm::mat4x4& glob_tm, vk::PipelineLayout pipeline_layout)
+  vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
   if (!sceneMgr->getVertexBuffer())
     return;
 
+  auto simpleGraphicsInfo = etna::get_shader_program("static_mesh_material");
+
+  auto set = etna::create_descriptor_set(
+    simpleGraphicsInfo.getDescriptorLayoutId(0),
+    cmd_buf,
+    {
+      etna::Binding{0, sceneMgr->getMatricesBuffer()->genBinding()},
+      etna::Binding{1, sceneMgr->getDrawMatricesIndBuffer()->genBinding()},
+      etna::Binding{2, sceneMgr->getMatricesOffsetsIndBuffer()->genBinding()},
+    });
+
+  vk::DescriptorSet vkSet = set.getVkSet();
+
+  cmd_buf.bindPipeline(vk::PipelineBindPoint::eGraphics, staticMeshPipeline.getVkPipeline());
+
   cmd_buf.bindVertexBuffers(0, {sceneMgr->getVertexBuffer()}, {0});
   cmd_buf.bindIndexBuffer(sceneMgr->getIndexBuffer(), 0, vk::IndexType::eUint32);
 
-  pushConst2M.projView = glob_tm;
+  cmd_buf.bindDescriptorSets(
+    vk::PipelineBindPoint::eGraphics, 
+    pipeline_layout, 0, 1, &vkSet, 0, nullptr);
 
-  auto instanceMeshes = sceneMgr->getInstanceMeshes();
-  auto instanceMatrices = sceneMgr->getInstanceMatrices();
+  cmd_buf.pushConstants(
+    pipeline_layout, vk::ShaderStageFlagBits::eVertex, 
+    0, sizeof(PushConstants), &pushConstMC);
 
-  auto meshes = sceneMgr->getMeshes();
-  auto relems = sceneMgr->getRenderElements();
-
-  for (std::size_t instIdx = 0; instIdx < instanceMeshes.size(); ++instIdx)
-  {
-    pushConst2M.model = instanceMatrices[instIdx];
-
-    cmd_buf.pushConstants<PushConstants>(
-      pipeline_layout, vk::ShaderStageFlagBits::eVertex, 0, {pushConst2M});
-
-    const auto meshIdx = instanceMeshes[instIdx];
-
-    for (std::size_t j = 0; j < meshes[meshIdx].relemCount; ++j)
-    {
-      const auto relemIdx = meshes[meshIdx].firstRelem + j;
-      const auto& relem = relems[relemIdx];
-      cmd_buf.drawIndexed(relem.indexCount, 1, relem.indexOffset, relem.vertexOffset, 0);
-    }
-  }
+  cmd_buf.drawIndexedIndirect(
+    sceneMgr->getDrawCmdBuffer()->get(), 0, static_cast<std::uint32_t>(sceneMgr->getRenderElements().size()), 0);
 }
 
 void WorldRenderer::renderWorld(
@@ -127,13 +168,16 @@ void WorldRenderer::renderWorld(
   {
     ETNA_PROFILE_GPU(cmd_buf, renderForward);
 
+    pushConstMC.projView = worldViewProj;
+
+    cullScene(cmd_buf, cullingPipeline.getVkPipelineLayout());
+
     etna::RenderTargetState renderTargets(
       cmd_buf,
       {{0, 0}, {resolution.x, resolution.y}},
       {{.image = target_image, .view = target_image_view}},
       {.image = mainViewDepth.get(), .view = mainViewDepth.getView({})});
 
-    cmd_buf.bindPipeline(vk::PipelineBindPoint::eGraphics, staticMeshPipeline.getVkPipeline());
-    renderScene(cmd_buf, worldViewProj, staticMeshPipeline.getVkPipelineLayout());
+    renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
   }
 }

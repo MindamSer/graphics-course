@@ -3,6 +3,7 @@
 #include <etna/Image.hpp>
 #include <etna/Sampler.hpp>
 #include <etna/Buffer.hpp>
+#include <etna/ComputePipeline.hpp>
 #include <etna/GraphicsPipeline.hpp>
 #include <glm/glm.hpp>
 
@@ -30,8 +31,10 @@ public:
     vk::CommandBuffer cmd_buf, vk::Image target_image, vk::ImageView target_image_view);
 
 private:
+  void cullScene(
+    vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
   void renderScene(
-    vk::CommandBuffer cmd_buf, const glm::mat4x4& glob_tm, vk::PipelineLayout pipeline_layout);
+    vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
 
 
 private:
@@ -43,12 +46,14 @@ private:
   struct PushConstants
   {
     glm::mat4x4 projView;
-    glm::mat4x4 model;
-  } pushConst2M;
+    std::uint32_t instanceCount;
+    std::uint32_t relemCount;
+  } pushConstMC;
 
   glm::mat4x4 worldViewProj;
   glm::mat4x4 lightMatrix;
 
+  etna::ComputePipeline cullingPipeline{};
   etna::GraphicsPipeline staticMeshPipeline{};
 
   glm::uvec2 resolution;

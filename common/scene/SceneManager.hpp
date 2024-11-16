@@ -29,6 +29,12 @@ struct Mesh
   std::uint32_t relemCount;
 };
 
+struct RenderElementBoundingBox
+{
+  glm::vec3 max_pos;
+  glm::vec3 min_pos;
+};
+
 class SceneManager
 {
 public:
@@ -49,6 +55,15 @@ public:
 
   vk::Buffer getVertexBuffer() { return unifiedVbuf.get(); }
   vk::Buffer getIndexBuffer() { return unifiedIbuf.get(); }
+
+  etna::Buffer* getRelemBuffer() { return &unifiedRelemBuf; }
+  etna::Buffer* getRelemBoxBuffer() { return &unifiedRelemBoxBuf; }
+  etna::Buffer* getMeshBuffer() { return &unifiedMeshBuf; }
+  etna::Buffer* getMatricesBuffer() { return &unifiedInstMatricesBuf; }
+  etna::Buffer* getIMeshesBuffer() { return &unifiedInstMeshesBuf; }
+  etna::Buffer* getDrawCmdBuffer() { return &unifiedDrawCmdBuf; }
+  etna::Buffer* getDrawMatricesIndBuffer() { return &unifiedDrawMatricesIndBuf; }
+  etna::Buffer* getMatricesOffsetsIndBuffer() { return &unifiedMatricesOffsetsIndBuf; }
 
   etna::VertexByteStreamFormatDescription getVertexFormatDescription();
 
@@ -79,6 +94,7 @@ private:
     std::vector<std::uint32_t> indices;
     std::vector<RenderElement> relems;
     std::vector<Mesh> meshes;
+    std::vector<RenderElementBoundingBox> relemBoxes;
   };
   ProcessedMeshes processMeshes(const tinygltf::Model& model) const;
   ProcessedMeshes processBakedMeshes(const tinygltf::Model& model) const;
@@ -90,10 +106,24 @@ private:
   etna::BlockingTransferHelper transferHelper;
 
   std::vector<RenderElement> renderElements;
+  std::vector<RenderElementBoundingBox> relemBoxes;
   std::vector<Mesh> meshes;
   std::vector<glm::mat4x4> instanceMatrices;
   std::vector<std::uint32_t> instanceMeshes;
 
+  std::vector<VkDrawIndexedIndirectCommand> drawCmds;
+  std::vector<std::uint32_t> matricesOffsetsInd;
+
   etna::Buffer unifiedVbuf;
   etna::Buffer unifiedIbuf;
+
+  etna::Buffer unifiedRelemBuf;
+  etna::Buffer unifiedRelemBoxBuf;
+  etna::Buffer unifiedMeshBuf;
+  etna::Buffer unifiedInstMatricesBuf;
+  etna::Buffer unifiedInstMeshesBuf;
+
+  etna::Buffer unifiedDrawCmdBuf;
+  etna::Buffer unifiedDrawMatricesIndBuf;
+  etna::Buffer unifiedMatricesOffsetsIndBuf;
 };

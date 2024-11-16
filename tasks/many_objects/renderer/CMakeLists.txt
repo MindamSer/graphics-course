@@ -10,6 +10,7 @@ target_link_libraries(many_objects_renderer
   PRIVATE glfw etna glm::glm wsi gui scene render_utils)
 
 target_add_shaders(many_objects_renderer
+  shaders/gpu_culling.comp
   shaders/static_mesh.frag
   shaders/static_mesh.vert
 )
