@@ -12,10 +12,6 @@ layout(binding = 1) readonly buffer DrawMatricesIndBuffer
 {
     uint DrawMatricesIndBuf[];
 };
-layout(binding = 2) readonly buffer MatricesOffsetsIndBuffer
-{
-    uint MatricesOffsetsIndBuf[];
-};
 
 layout(location = 0) in vec4 vPosNorm;
 layout(location = 1) in vec4 vTexCoordAndTang;

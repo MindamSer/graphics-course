@@ -108,8 +108,9 @@ void main() {
         for (int i = 0; i < 8; ++i)
         {
             visible = visible ||
-            abs(boxVertices[i].x) < 1.0 &&
-            abs(boxVertices[i].y) < 1.0;
+            boxVertices[i].z > 0.0 &&
+            boxVertices[i].z / abs(boxVertices[i].x) > 1.0 &&
+            boxVertices[i].z / abs(boxVertices[i].y) > 1.0;
         }
     
         if (visible)

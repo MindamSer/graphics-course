@@ -137,7 +137,6 @@ void WorldRenderer::renderScene(
     {
       etna::Binding{0, sceneMgr->getMatricesBuffer()->genBinding()},
       etna::Binding{1, sceneMgr->getDrawMatricesIndBuffer()->genBinding()},
-      etna::Binding{2, sceneMgr->getMatricesOffsetsIndBuffer()->genBinding()},
     });
 
   vk::DescriptorSet vkSet = set.getVkSet();
