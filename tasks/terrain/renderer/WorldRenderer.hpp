@@ -35,6 +35,8 @@ private:
     vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
   void renderScene(
     vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
+  void renderTerrain(
+    vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
 
 
 private:

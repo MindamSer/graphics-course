@@ -154,8 +154,18 @@ void WorldRenderer::renderScene(
     pipeline_layout, vk::ShaderStageFlagBits::eVertex, 
     0, sizeof(PushConstants), &pushConstMC);
 
+  etna::flush_barriers(cmd_buf);
+
   cmd_buf.drawIndexedIndirect(
     sceneMgr->getDrawCmdBuffer()->get(), 0, static_cast<std::uint32_t>(sceneMgr->getRenderElements().size()), 0);
+}
+
+void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
+{
+  auto& t1 = cmd_buf;
+  t1 = t1;
+  auto& t2 = pipeline_layout;
+  t2 = t2;
 }
 
 void WorldRenderer::renderWorld(
@@ -178,5 +188,7 @@ void WorldRenderer::renderWorld(
       {.image = mainViewDepth.get(), .view = mainViewDepth.getView({})});
 
     renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
+
+    // renderTerrain(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
   }
 }

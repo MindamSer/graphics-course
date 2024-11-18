@@ -8,6 +8,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <etna/GlobalContext.hpp>
 #include <etna/OneShotCmdMgr.hpp>
+#include "perlin_noise.hpp"
 
 
 SceneManager::SceneManager()
@@ -410,6 +411,31 @@ SceneManager::ProcessedMeshes SceneManager::processBakedMeshes(const tinygltf::M
   return result;
 }
 
+void SceneManager::genHieghtMap()
+{
+  hieghtMap = etna::get_context().createImage(etna::Image::CreateInfo{
+    .extent = vk::Extent3D{4096, 4096, 1},
+    .name = "terrain_height_map",
+    .format = vk::Format::eR32Sfloat,
+    .imageUsage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage});
+
+  float* hieghtMapData = new float[4096 * 4096];
+
+  for (int i = 0; i < 4096; ++i)
+  {
+    for (int j = 0; j < 4096; ++j)
+    {
+      hieghtMapData[i * 4096 + j] = perlin(j * 1.0f, i * 1.0f);
+    }
+  }
+
+  transferHelper.uploadImage(
+    *oneShotCommands, hieghtMap, 0, 0,
+    std::span<const std::byte>(reinterpret_cast<const std::byte*>(hieghtMapData), 4096 * 4096 * 4));
+
+  delete[] hieghtMapData;
+}
+
 void SceneManager::uploadData(
   std::span<const Vertex> vertices, std::span<const std::uint32_t> indices)
 {
@@ -506,6 +532,8 @@ void SceneManager::uploadData(
     *oneShotCommands, unifiedDrawCmdBuf, 0, drawCmds);
   transferHelper.uploadBuffer<std::uint32_t>(
     *oneShotCommands, unifiedMatricesOffsetsIndBuf, 0, matricesOffsetsInd);
+
+  genHieghtMap();
 }
 
 void SceneManager::selectScene(std::filesystem::path path)
