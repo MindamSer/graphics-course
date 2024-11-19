@@ -213,6 +213,17 @@ void App::drawFrame()
         std::chrono::duration<float>(std::chrono::system_clock::now() - timeStart).count();
 
 
+      etna::set_state(
+        currentCmdBuf,
+        textureImage.get(),
+        vk::PipelineStageFlagBits2::eComputeShader,
+        vk::AccessFlagBits2::eShaderStorageWrite,
+        vk::ImageLayout::eGeneral,
+        vk::ImageAspectFlagBits::eColor);
+
+      etna::flush_barriers(currentCmdBuf);
+
+
       // --- Texture ---
       {
         auto computeInfo = etna::get_shader_program("procedural_texture");
@@ -240,8 +251,6 @@ void App::drawFrame()
             .time = time
         };
         currentCmdBuf.pushConstants( texturePipeline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(param), &param);
-
-        etna::flush_barriers(currentCmdBuf);
 
         currentCmdBuf.dispatch(resolution.x / 16, resolution.y / 16, 1);
       }
@@ -295,6 +304,7 @@ void App::drawFrame()
 
         currentCmdBuf.draw(3, 1, 0, 0);
       }
+
 
       // At the end of "rendering", we are required to change how the pixels of the
       // swpchain image are laid out in memory to something that is appropriate
