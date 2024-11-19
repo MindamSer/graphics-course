@@ -245,6 +245,17 @@ void App::drawFrame()
       std::memcpy(constantsBuffers[cur_frame % 3].data(), &param, sizeof(param));
 
 
+      etna::set_state(
+        currentCmdBuf,
+        textureImage.get(),
+        vk::PipelineStageFlagBits2::eComputeShader,
+        vk::AccessFlagBits2::eShaderStorageWrite,
+        vk::ImageLayout::eGeneral,
+        vk::ImageAspectFlagBits::eColor);
+
+      etna::flush_barriers(currentCmdBuf);
+
+
       // --- Texture ---
       {
         ZoneScopedN("creating_compute_shader");
@@ -263,8 +274,6 @@ void App::drawFrame()
         currentCmdBuf.bindPipeline(vk::PipelineBindPoint::eCompute, texturePipeline.getVkPipeline());
         currentCmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, texturePipeline.getVkPipelineLayout(),
           0, 1, &vkSet, 0, nullptr);
-
-        currentCmdBuf.pushConstants( texturePipeline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(param), &param);
 
         etna::flush_barriers(currentCmdBuf);
 
@@ -306,8 +315,6 @@ void App::drawFrame()
         currentCmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, shaderPipeline.getVkPipeline());
         currentCmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, shaderPipeline.getVkPipelineLayout(),
           0, 1, &vkSet, 0, nullptr);
-
-        currentCmdBuf.pushConstants(shaderPipeline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(param), &param);
 
         currentCmdBuf.draw(3, 1, 0, 0);
       }
