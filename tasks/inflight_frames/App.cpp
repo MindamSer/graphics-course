@@ -116,7 +116,7 @@ App::App()
     .imageUsage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage |
       vk::ImageUsageFlagBits::eTransferDst});
 
-  fileTextureSampler = etna::Sampler::Sampler(etna::Sampler::CreateInfo{
+  fileTextureSampler = etna::Sampler(etna::Sampler::CreateInfo{
     .addressMode = vk::SamplerAddressMode::eRepeat, .name = "fileTextureSampler"});
 
   transferHelper =
@@ -175,7 +175,6 @@ void App::run()
 {
   while (!osWindow->isBeingClosed())
   {
-    ZoneScopedN("tick");
     windowing.poll();
 
     drawFrame();
@@ -188,7 +187,6 @@ void App::run()
 
 void App::drawFrame()
 {
-  ZoneScopedN("draw_func");
 
   // First, get a command buffer to write GPU commands into.
   auto currentCmdBuf = commandManager->acquireNext();
@@ -204,31 +202,34 @@ void App::drawFrame()
 
   if (nextSwapchainImage)
   {
-    ZoneScopedN("swapchain_good");
     auto [backbuffer, backbufferView, backbufferAvailableSem] = *nextSwapchainImage;
 
     ETNA_CHECK_VK_RESULT(currentCmdBuf.begin(vk::CommandBufferBeginInfo{}));
     {
       ETNA_PROFILE_GPU(currentCmdBuf, renderFrame);
 
-      // First of all, we need to "initialize" th "backbuffer", aka the current swapchain
-      // image, into a state that is appropriate for us working with it. The initial state
-      // is considered to be "undefined" (aka "I contain trash memory"), by the way.
-      // "Transfer" in vulkanese means "copy or blit".
-      // Note that Etna sometimes calls this for you to make life simpler, read Etna's code!
-      etna::set_state(
-        currentCmdBuf,
-        backbuffer,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::AccessFlagBits2::eColorAttachmentWrite,
-        vk::ImageLayout::eColorAttachmentOptimal,
-        vk::ImageAspectFlagBits::eColor);
-      // The set_state doesn't actually record any commands, they are deferred to
-      // the moment you call flush_barriers.
-      // As with set_state, Etna sometimes flushes on it's own.
-      // Usually, flushes should be placed before "action", i.e. compute dispatches
-      // and blit/copy operations.
-      etna::flush_barriers(currentCmdBuf);
+      {
+        ETNA_PROFILE_GPU(currentCmdBuf, setState_bufferIn);
+
+        // First of all, we need to "initialize" th "backbuffer", aka the current swapchain
+        // image, into a state that is appropriate for us working with it. The initial state
+        // is considered to be "undefined" (aka "I contain trash memory"), by the way.
+        // "Transfer" in vulkanese means "copy or blit".
+        // Note that Etna sometimes calls this for you to make life simpler, read Etna's code!
+        etna::set_state(
+          currentCmdBuf,
+          backbuffer,
+          vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+          vk::AccessFlagBits2::eColorAttachmentWrite,
+          vk::ImageLayout::eColorAttachmentOptimal,
+          vk::ImageAspectFlagBits::eColor);
+        // The set_state doesn't actually record any commands, they are deferred to
+        // the moment you call flush_barriers.
+        // As with set_state, Etna sometimes flushes on it's own.
+        // Usually, flushes should be placed before "action", i.e. compute dispatches
+        // and blit/copy operations.
+        etna::flush_barriers(currentCmdBuf);
+      }
 
 
       // TODO: Record your commands here!
@@ -245,20 +246,24 @@ void App::drawFrame()
       std::memcpy(constantsBuffers[cur_frame % 3].data(), &param, sizeof(param));
 
 
-      etna::set_state(
-        currentCmdBuf,
-        textureImage.get(),
-        vk::PipelineStageFlagBits2::eComputeShader,
-        vk::AccessFlagBits2::eShaderStorageWrite,
-        vk::ImageLayout::eGeneral,
-        vk::ImageAspectFlagBits::eColor);
+      {
+        ETNA_PROFILE_GPU(currentCmdBuf, setState_imageCompute);
 
-      etna::flush_barriers(currentCmdBuf);
+        etna::set_state(
+          currentCmdBuf,
+          textureImage.get(),
+          vk::PipelineStageFlagBits2::eComputeShader,
+          vk::AccessFlagBits2::eShaderStorageWrite,
+          vk::ImageLayout::eGeneral,
+          vk::ImageAspectFlagBits::eColor);
+
+        etna::flush_barriers(currentCmdBuf);
+      }
 
 
       // --- Texture ---
       {
-        ZoneScopedN("creating_compute_shader");
+        ETNA_PROFILE_GPU(currentCmdBuf, computeShader);
         auto computeInfo = etna::get_shader_program("procedural_texture");
 
         auto set = etna::create_descriptor_set(
@@ -281,20 +286,23 @@ void App::drawFrame()
       }
 
 
-      etna::set_state(
-        currentCmdBuf,
-        textureImage.get(),
-        vk::PipelineStageFlagBits2::eFragmentShader,
-        vk::AccessFlagBits2::eShaderSampledRead,
-        vk::ImageLayout::eShaderReadOnlyOptimal,
-        vk::ImageAspectFlagBits::eColor);
+      {
+        ETNA_PROFILE_GPU(currentCmdBuf, setState_imageGraphics);
+        etna::set_state(
+          currentCmdBuf,
+          textureImage.get(),
+          vk::PipelineStageFlagBits2::eFragmentShader,
+          vk::AccessFlagBits2::eShaderSampledRead,
+          vk::ImageLayout::eShaderReadOnlyOptimal,
+          vk::ImageAspectFlagBits::eColor);
 
-      etna::flush_barriers(currentCmdBuf);
+        etna::flush_barriers(currentCmdBuf);
+      }
 
 
       // --- Drawing ---
       {
-        ZoneScopedN("creating_graphic_shader");
+        ETNA_PROFILE_GPU(currentCmdBuf, graphicsShader);
 
         etna::RenderTargetState state{currentCmdBuf, {{}, {resolution.x, resolution.y}}, 
             {{backbuffer, backbufferView}}, {}};
@@ -319,21 +327,29 @@ void App::drawFrame()
         currentCmdBuf.draw(3, 1, 0, 0);
       }
 
-      // At the end of "rendering", we are required to change how the pixels of the
-      // swpchain image are laid out in memory to something that is appropriate
-      // for presenting to the window (while preserving the content of the pixels!).
-      etna::set_state(
-        currentCmdBuf,
-        backbuffer,
-        // This looks weird, but is correct. Ask about it later.
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        {},
-        vk::ImageLayout::ePresentSrcKHR,
-        vk::ImageAspectFlagBits::eColor);
-      // And of course flush the layout transition.
-      etna::flush_barriers(currentCmdBuf);
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(7));
+      {
+        ETNA_PROFILE_GPU(currentCmdBuf, setState_bufferOut);
+
+        // At the end of "rendering", we are required to change how the pixels of the
+        // swpchain image are laid out in memory to something that is appropriate
+        // for presenting to the window (while preserving the content of the pixels!).
+        etna::set_state(
+          currentCmdBuf,
+          backbuffer,
+          // This looks weird, but is correct. Ask about it later.
+          vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+          {},
+          vk::ImageLayout::ePresentSrcKHR,
+          vk::ImageAspectFlagBits::eColor);
+        // And of course flush the layout transition.
+        etna::flush_barriers(currentCmdBuf);
+      }
+
+      {
+        ETNA_PROFILE_GPU(currentCmdBuf, sleep);
+        std::this_thread::sleep_for(std::chrono::milliseconds(7));
+      }
 
       ++cur_frame;
 
