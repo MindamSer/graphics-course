@@ -41,7 +41,15 @@ void WorldRenderer::loadShaders()
     {TERRAIN_RENDERER_SHADERS_ROOT "static_mesh.frag.spv",
      TERRAIN_RENDERER_SHADERS_ROOT "static_mesh.vert.spv"});
   etna::create_program("static_mesh", {TERRAIN_RENDERER_SHADERS_ROOT "static_mesh.vert.spv"});
+
   etna::create_program("culling_shader", {TERRAIN_RENDERER_SHADERS_ROOT "gpu_culling.comp.spv"});
+
+  etna::create_program(
+      "terrain_shader",
+      {TERRAIN_RENDERER_SHADERS_ROOT "terrain.vert.spv",
+       TERRAIN_RENDERER_SHADERS_ROOT "terrain.tesc.spv",
+       TERRAIN_RENDERER_SHADERS_ROOT "terrain.tese.spv",
+       TERRAIN_RENDERER_SHADERS_ROOT "terrain.frag.spv"});
 }
 
 void WorldRenderer::setupPipelines(vk::Format swapchain_format)
@@ -73,7 +81,28 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
         },
     });
 
+  cullingPipeline = {};
   cullingPipeline = pipelineManager.createComputePipeline("culling_shader", {});
+
+  terrainPipeline = {};
+  terrainPipeline = pipelineManager.createGraphicsPipeline(
+    "terrain_shader",
+    etna::GraphicsPipeline::CreateInfo{
+      .vertexShaderInput = sceneVertexInputDesc,
+      .inputAssemblyConfig = {.topology = vk::PrimitiveTopology::ePatchList},
+      .rasterizationConfig =
+        vk::PipelineRasterizationStateCreateInfo{
+          .polygonMode = vk::PolygonMode::eFill,
+          .cullMode = vk::CullModeFlagBits::eBack,
+          .frontFace = vk::FrontFace::eCounterClockwise,
+          .lineWidth = 1.f,
+        },
+      .fragmentShaderOutput =
+        {
+          .colorAttachmentFormats = {swapchain_format},
+          .depthAttachmentFormat = vk::Format::eD32Sfloat,
+        },
+    });
 }
 
 void WorldRenderer::debugInput(const Keyboard&) {}
@@ -187,7 +216,7 @@ void WorldRenderer::renderWorld(
       {{.image = target_image, .view = target_image_view}},
       {.image = mainViewDepth.get(), .view = mainViewDepth.getView({})});
 
-    renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
+    // renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
 
     // renderTerrain(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
   }

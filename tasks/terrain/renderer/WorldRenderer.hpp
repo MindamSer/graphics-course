@@ -57,6 +57,7 @@ private:
 
   etna::ComputePipeline cullingPipeline{};
   etna::GraphicsPipeline staticMeshPipeline{};
+  etna::GraphicsPipeline terrainPipeline{};
 
   glm::uvec2 resolution;
 };

@@ -28,7 +28,7 @@ void Renderer::initVulkan(std::span<const char*> instance_extensions)
     .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
     .instanceExtensions = instanceExtensions,
     .deviceExtensions = deviceExtensions,
-    .features = vk::PhysicalDeviceFeatures2{.features = {}},
+    .features = vk::PhysicalDeviceFeatures2{.features = {.tessellationShader = true}},
     .physicalDeviceIndexOverride = {},
     .numFramesInFlight = 2,
   });

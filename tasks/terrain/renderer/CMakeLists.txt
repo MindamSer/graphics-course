@@ -13,4 +13,8 @@ target_add_shaders(terrain_renderer
   shaders/gpu_culling.comp
   shaders/static_mesh.frag
   shaders/static_mesh.vert
+  shaders/terrain.vert
+  shaders/terrain.tesc
+  shaders/terrain.tese
+  shaders/terrain.frag
 )
