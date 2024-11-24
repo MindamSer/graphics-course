@@ -88,7 +88,6 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
   terrainPipeline = pipelineManager.createGraphicsPipeline(
     "terrain_shader",
     etna::GraphicsPipeline::CreateInfo{
-      .vertexShaderInput = sceneVertexInputDesc,
       .inputAssemblyConfig = {.topology = vk::PrimitiveTopology::ePatchList},
       .rasterizationConfig =
         vk::PipelineRasterizationStateCreateInfo{
@@ -120,6 +119,48 @@ void WorldRenderer::update(const FramePacket& packet)
 
 void WorldRenderer::cullScene(vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
+  {
+    vk::BufferMemoryBarrier2 barriers[] = {{}, {}, {}};
+
+    barriers[0] = vk::BufferMemoryBarrier2{
+      .srcStageMask = vk::PipelineStageFlagBits2::eVertexShader,
+      .srcAccessMask = vk::AccessFlagBits2::eShaderRead,
+      .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+      .dstAccessMask = vk::AccessFlagBits2::eShaderWrite,
+      .buffer = sceneMgr->getMatricesBuffer()->get(),
+      .offset = 0,
+      .size = vk::WholeSize,
+    };
+
+    barriers[1] = vk::BufferMemoryBarrier2{
+      .srcStageMask = vk::PipelineStageFlagBits2::eVertexShader,
+      .srcAccessMask = vk::AccessFlagBits2::eShaderRead,
+      .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+      .dstAccessMask = vk::AccessFlagBits2::eShaderWrite,
+      .buffer = sceneMgr->getDrawMatricesIndBuffer()->get(),
+      .offset = 0,
+      .size = vk::WholeSize,
+    };
+
+    barriers[2] = vk::BufferMemoryBarrier2{
+      .srcStageMask = vk::PipelineStageFlagBits2::eDrawIndirect,
+      .srcAccessMask = vk::AccessFlagBits2::eIndirectCommandRead,
+      .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+      .dstAccessMask = vk::AccessFlagBits2::eShaderWrite,
+      .buffer = sceneMgr->getDrawCmdBuffer()->get(),
+      .offset = 0,
+      .size = vk::WholeSize,
+    };
+
+    vk::DependencyInfo depInfo{
+      .dependencyFlags = vk::DependencyFlagBits::eByRegion,
+      .bufferMemoryBarrierCount = 3,
+      .pBufferMemoryBarriers = barriers,
+    };
+
+    cmd_buf.pipelineBarrier2(depInfo);
+  }
+
   auto simpleComputeInfo = etna::get_shader_program("culling_shader");
 
   auto set = etna::create_descriptor_set(
@@ -150,6 +191,48 @@ void WorldRenderer::cullScene(vk::CommandBuffer cmd_buf, vk::PipelineLayout pipe
   etna::flush_barriers(cmd_buf);
 
   cmd_buf.dispatch((pushConstMC.instanceCount + 255) / 256, 1, 1);
+
+  {
+    vk::BufferMemoryBarrier2 barriers[] = {{}, {}, {}};
+
+    barriers[0] = vk::BufferMemoryBarrier2{
+      .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+      .srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
+      .dstStageMask = vk::PipelineStageFlagBits2::eVertexShader,
+      .dstAccessMask = vk::AccessFlagBits2::eShaderRead,
+      .buffer = sceneMgr->getMatricesBuffer()->get(),
+      .offset = 0,
+      .size = vk::WholeSize,
+    };
+
+    barriers[1] = vk::BufferMemoryBarrier2{
+      .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+      .srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
+      .dstStageMask = vk::PipelineStageFlagBits2::eVertexShader,
+      .dstAccessMask = vk::AccessFlagBits2::eShaderRead,
+      .buffer = sceneMgr->getDrawMatricesIndBuffer()->get(),
+      .offset = 0,
+      .size = vk::WholeSize,
+    };
+
+    barriers[2] = vk::BufferMemoryBarrier2{
+      .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+      .srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
+      .dstStageMask = vk::PipelineStageFlagBits2::eDrawIndirect,
+      .dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead,
+      .buffer = sceneMgr->getDrawCmdBuffer()->get(),
+      .offset = 0,
+      .size = vk::WholeSize,
+    };
+
+    vk::DependencyInfo depInfo{
+      .dependencyFlags = vk::DependencyFlagBits::eByRegion,
+      .bufferMemoryBarrierCount = 3,
+      .pBufferMemoryBarriers = barriers,
+    };
+
+    cmd_buf.pipelineBarrier2(depInfo);
+  }
 }
 
 void WorldRenderer::renderScene(
@@ -191,10 +274,28 @@ void WorldRenderer::renderScene(
 
 void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
-  auto& t1 = cmd_buf;
-  t1 = t1;
-  auto& t2 = pipeline_layout;
-  t2 = t2;
+  auto simpleGraphicsInfo = etna::get_shader_program("terrain_shader");
+
+  auto set = etna::create_descriptor_set(
+    simpleGraphicsInfo.getDescriptorLayoutId(0),
+    cmd_buf,
+    {
+      etna::Binding{
+        0,
+        sceneMgr->getHieghtMapImage()->genBinding(
+        sceneMgr->getHieghtMapSampler()->get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+    });
+
+  vk::DescriptorSet vkSet = set.getVkSet();
+
+  cmd_buf.bindPipeline(vk::PipelineBindPoint::eGraphics, terrainPipeline.getVkPipeline());
+
+  cmd_buf.bindDescriptorSets(
+    vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, 1, &vkSet, 0, nullptr);
+
+  etna::flush_barriers(cmd_buf);
+
+  cmd_buf.draw(3,1,0,0);
 }
 
 void WorldRenderer::renderWorld(
@@ -216,8 +317,8 @@ void WorldRenderer::renderWorld(
       {{.image = target_image, .view = target_image_view}},
       {.image = mainViewDepth.get(), .view = mainViewDepth.getView({})});
 
-    // renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
-
-    // renderTerrain(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
+    renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
+    
+    // renderTerrain(cmd_buf, terrainPipeline.getVkPipelineLayout());
   }
 }

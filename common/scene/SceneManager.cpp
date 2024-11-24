@@ -417,7 +417,10 @@ void SceneManager::genHieghtMap()
     .extent = vk::Extent3D{4096, 4096, 1},
     .name = "terrain_height_map",
     .format = vk::Format::eR32Sfloat,
-    .imageUsage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage});
+    .imageUsage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage});\
+
+  hieghtMapSampler = etna::Sampler::Sampler(etna::Sampler::CreateInfo{
+    .addressMode = vk::SamplerAddressMode::eRepeat, .name = "hieghtMapSampler"});
 
   float* hieghtMapData = new float[4096 * 4096];
 

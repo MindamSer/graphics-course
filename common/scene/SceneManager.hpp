@@ -6,6 +6,7 @@
 #include <tiny_gltf.h>
 #include <etna/Buffer.hpp>
 #include <etna/Image.hpp>
+#include <etna/Sampler.hpp>
 #include <etna/BlockingTransferHelper.hpp>
 #include <etna/VertexInput.hpp>
 
@@ -67,6 +68,7 @@ public:
   etna::Buffer* getMatricesOffsetsIndBuffer() { return &unifiedMatricesOffsetsIndBuf; }
 
   etna::Image* getHieghtMapImage() { return &hieghtMap; }
+  etna::Sampler* getHieghtMapSampler() { return &hieghtMapSampler; };
 
   etna::VertexByteStreamFormatDescription getVertexFormatDescription();
 
@@ -131,5 +133,6 @@ private:
   etna::Buffer unifiedMatricesOffsetsIndBuf;
 
   etna::Image hieghtMap;
+  etna::Sampler hieghtMapSampler;
   void genHieghtMap();
 };
