@@ -99,7 +99,7 @@ App::App()
     .format = vk::Format::eR8G8B8A8Unorm,
     .imageUsage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage});
 
-  textureSampler = etna::Sampler::Sampler(etna::Sampler::CreateInfo{
+  textureSampler = etna::Sampler(etna::Sampler::CreateInfo{
     .addressMode = vk::SamplerAddressMode::eRepeat, .name = "textureSampler"});
 
 
