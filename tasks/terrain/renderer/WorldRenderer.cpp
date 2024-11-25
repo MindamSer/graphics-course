@@ -89,6 +89,7 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
     "terrain_shader",
     etna::GraphicsPipeline::CreateInfo{
       .inputAssemblyConfig = {.topology = vk::PrimitiveTopology::ePatchList},
+      .tessellationConfig = {.patchControlPoints = 4},
       .rasterizationConfig =
         vk::PipelineRasterizationStateCreateInfo{
           .polygonMode = vk::PolygonMode::eFill,
@@ -113,7 +114,8 @@ void WorldRenderer::update(const FramePacket& packet)
   // calc camera matrix
   {
     const float aspect = float(resolution.x) / float(resolution.y);
-    worldViewProj = packet.mainCam.projTm(aspect) * packet.mainCam.viewTm();
+    pushConstMC.projView = packet.mainCam.projTm(aspect) * packet.mainCam.viewTm();
+    pushConstMC.cameraPos = packet.mainCam.position;
   }
 }
 
@@ -293,7 +295,15 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout 
   cmd_buf.bindDescriptorSets(
     vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, 1, &vkSet, 0, nullptr);
 
-  cmd_buf.draw(3,1,0,0);
+  cmd_buf.pushConstants(
+    pipeline_layout,
+    vk::ShaderStageFlagBits::eTessellationEvaluation |
+    vk::ShaderStageFlagBits::eTessellationControl,
+    0,
+    sizeof(PushConstants),
+    &pushConstMC);
+
+  cmd_buf.draw(4,256,0,0);
 }
 
 void WorldRenderer::renderWorld(
@@ -304,8 +314,6 @@ void WorldRenderer::renderWorld(
   // draw final scene to screen
   {
     ETNA_PROFILE_GPU(cmd_buf, renderForward);
-
-    pushConstMC.projView = worldViewProj;
 
     cullScene(cmd_buf, cullingPipeline.getVkPipelineLayout());
 

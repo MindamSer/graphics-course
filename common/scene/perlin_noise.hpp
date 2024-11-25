@@ -32,9 +32,9 @@ vector2 randomGradient(int ix, int iy)
   const unsigned s = w / 2; // rotation width
   unsigned a = ix, b = iy;
   a *= 3284157443;
-  b ^= a << s | a >> (w - s);
+  b ^= (a << s) | (a >> (w - s));
   b *= 1911520717;
-  a ^= b << s | b >> (w - s);
+  a ^= (b << s) | (b >> (w - s));
   a *= 2048419325;
   float random = a * (3.14159265f / ~((~0u) >> 1)); // in [0, 2*Pi]
   vector2 v;

@@ -420,7 +420,7 @@ void SceneManager::genHieghtMap()
     .imageUsage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage});\
 
   hieghtMapSampler = etna::Sampler::Sampler(etna::Sampler::CreateInfo{
-    .addressMode = vk::SamplerAddressMode::eRepeat, .name = "hieghtMapSampler"});
+    .addressMode = vk::SamplerAddressMode::eMirroredRepeat, .name = "hieghtMapSampler"});
 
   float* hieghtMapData = new float[4096 * 4096];
 
@@ -428,7 +428,7 @@ void SceneManager::genHieghtMap()
   {
     for (int j = 0; j < 4096; ++j)
     {
-      hieghtMapData[i * 4096 + j] = 0; //perlin(j * 1.0f, i * 1.0f);
+      hieghtMapData[i * 4096 + j] = (perlin(j * 0.005f, i * 0.005f) + 1.0f) * 0.5f;
     }
   }
 

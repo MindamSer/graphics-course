@@ -62,6 +62,7 @@ layout(binding = 6) buffer MatricesOffsetsIndBuffer
 layout(push_constant) uniform params
 {
   mat4 mProjView;
+  vec3 cameraPos;
   uint instanceCount;
   uint relemCount;
 } pushConstant;

@@ -48,6 +48,7 @@ private:
   struct PushConstants
   {
     glm::mat4x4 projView;
+    glm::vec3 cameraPos;
     std::uint32_t instanceCount;
     std::uint32_t relemCount;
   } pushConstMC;

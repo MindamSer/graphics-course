@@ -27,6 +27,7 @@ layout (location = 0 ) out VS_OUT
 layout(push_constant) uniform params
 {
   mat4 mProjView;
+  vec3 cameraPos;
   uint instanceCount;
   uint relemCount;
 } pushConstant;
