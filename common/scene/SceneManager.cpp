@@ -428,7 +428,7 @@ void SceneManager::genHieghtMap()
   {
     for (int j = 0; j < 4096; ++j)
     {
-      hieghtMapData[i * 4096 + j] = perlin(j * 1.0f, i * 1.0f);
+      hieghtMapData[i * 4096 + j] = 0; //perlin(j * 1.0f, i * 1.0f);
     }
   }
 
