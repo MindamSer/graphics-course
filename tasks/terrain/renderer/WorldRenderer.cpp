@@ -303,7 +303,7 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout 
     sizeof(PushConstants),
     &pushConstMC);
 
-  cmd_buf.draw(4,256,0,0);
+  cmd_buf.draw(4, 64*64, 0, 0);
 }
 
 void WorldRenderer::renderWorld(

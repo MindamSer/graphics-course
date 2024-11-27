@@ -14,28 +14,36 @@ layout(push_constant) uniform params
 
 void main()
 {
-	if(gl_InvocationID == 0)
-	{
-		vec3 ro = max(
-		max(abs(gl_in[0].gl_Position),abs(gl_in[1].gl_Position)),
-		max(abs(gl_in[2].gl_Position),abs(gl_in[3].gl_Position))).xyz;
+  int tileCount = 64;
+  float tileSize = 16.;
 
-		int maxDist = (int(max(ro.x, ro.z))) / 16;
-
-		int k = 1;
-		while(maxDist > 1)
-		{
-			--maxDist;
-			k *= 2;
-		}
-
-		gl_TessLevelOuter[0] = 32 / k;
-		gl_TessLevelOuter[1] = 32 / k;
-		gl_TessLevelOuter[2] = 32 / k;
-		gl_TessLevelOuter[3] = 32 / k;
-		gl_TessLevelInner[0] = 32 / k;
-		gl_TessLevelInner[1] = 32 / k;
-	}
-
-	gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+  if(gl_InvocationID == 0)
+  {
+  	vec2 maxPoint = max(
+  	max(gl_in[0].gl_Position.xz,gl_in[1].gl_Position.xz),
+  	max(gl_in[2].gl_Position.xz,gl_in[3].gl_Position.xz));
+  	vec2 minPoint = min(
+  	min(gl_in[0].gl_Position.xz,gl_in[1].gl_Position.xz),
+  	min(gl_in[2].gl_Position.xz,gl_in[3].gl_Position.xz));
+  	vec2 farPoint = max(abs(maxPoint), abs(minPoint));
+  	vec2 nearPoint = min(abs(maxPoint), abs(minPoint));
+  
+  	float maxDist = max(farPoint.x, farPoint.y);
+  	
+  	int k = 1;
+  	while(maxDist > 4 * tileSize)
+  	{
+  	  maxDist -= 4 * tileSize;
+  	  k *= 2;
+  	}
+  	
+  	gl_TessLevelOuter[0] = 64 / min(k, 64);
+  	gl_TessLevelOuter[1] = 64 / min(k, 64);
+  	gl_TessLevelOuter[2] = 64 / min(k, 64);
+  	gl_TessLevelOuter[3] = 64 / min(k, 64);
+  	gl_TessLevelInner[0] = 64 / min(k, 64);
+  	gl_TessLevelInner[1] = 64 / min(k, 64);
+  }
+  
+  gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
 }

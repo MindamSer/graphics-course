@@ -12,9 +12,9 @@ layout(location = 0) out vec4 color;
 
 void main()
 {
-	vec3 ligthPos = vec3(10, 10, 10);
-	vec3 pl = normalize(ligthPos - surf.pos);
-	float intens = max(0.0, dot(pl, surf.norm)) * 0.9 + 0.1;
-
-	color = vec4(vec3(intens), 1.0);
+  vec3 pl = normalize(vec3(1.0, 1.0, 10.0));
+  float intens = max(0.0, dot(pl, surf.norm)) + 0.05;
+  
+  color = vec4(vec3(intens), 1.0);
+  // color = vec4(surf.norm, 1.0);
 }
