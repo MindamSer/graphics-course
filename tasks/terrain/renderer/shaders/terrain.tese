@@ -2,15 +2,9 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_KHR_vulkan_glsl : enable
 
+
+
 layout(quads, equal_spacing, ccw) in;
-
-layout (location = 0 ) out VS_OUT
-{
-  vec3 pos;
-  vec3 norm;
-} vOut;
-
-layout(binding = 0) uniform sampler2D colorTex;
 
 layout(push_constant) uniform params
 {
@@ -20,29 +14,40 @@ layout(push_constant) uniform params
   uint relemCount;
 } pushConstant;
 
+layout(binding = 0) uniform sampler2D colorTex;
+
+layout (location = 0 ) out VS_OUT
+{
+  vec3 pos;
+  vec3 norm;
+} vOut;
+
+
+
 float H(vec2 coord)
 {
-	return textureLod(colorTex, coord, 0).r * 5.0;
+	return textureLod(colorTex, coord, 0).r * 100.0f;
 }
 
-vec3 getNorm(vec2 coord)
+vec3 getNorm(vec2 coord, float scale)
 {
-	float h = 1. / 4096.;
+	float h = scale / 2048.;
 
-	float du_x = (H(coord + vec2(h, 0.)) - H(coord));
-	float du_y = (H(coord + vec2(0., h)) - H(coord));
+	float du_x = (H(coord + vec2(h, 0.)) - H(coord - vec2(h, 0.))) / (2 * 0.5);
+	float du_y = (H(coord + vec2(0., h)) - H(coord - vec2(0., h))) / (2 * 0.5);
 
-	vec3 dx = vec3(h, 0., du_x);
-	vec3 dy = vec3(0., h, du_y);
-
-	return normalize(cross(dx,dy));
+	return normalize(vec3(du_x, du_y, 1));
 }
+
+
 
 void main()
 {
   int tileCount = 64;
   float tileSize = 16.;
-  
+  float hmScale = 8.;
+
+
   float u = gl_TessCoord.x;
   float v = gl_TessCoord.y;
   
@@ -55,13 +60,18 @@ void main()
   vec4 rightPos = pos1 + v * (pos2 - pos1);
   
   vec4 pos = leftPos + u * (rightPos - leftPos);
-  
-  pos.xz += tileSize * (ivec2(pushConstant.cameraPos.xz + tileSize / 2) / int(tileSize));
-  vec2 hmCoord = pos.xz / (tileCount * tileSize) + 0.5;
+
+
+  pos.xz *= tileSize;
+  pos.xz += tileSize * (ivec2(floor(pushConstant.cameraPos.xz / tileSize + 0.5)));
+
+
+  vec2 hmCoord = hmScale * (pos.xz) / (tileCount * tileSize) + 0.5;
   pos.y = H(hmCoord);
-  
+
+
   vOut.pos = pos.xyz;
-  vOut.norm = getNorm(hmCoord).xyz;
+  vOut.norm = getNorm(hmCoord, hmScale).xyz;
   
   gl_Position = pushConstant.mProjView * pos;
 }

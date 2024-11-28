@@ -428,7 +428,36 @@ void SceneManager::genHieghtMap()
   {
     for (int j = 0; j < 4096; ++j)
     {
-      hieghtMapData[i * 4096 + j] = (perlin(j * 0.04f, i * 0.04f) + 1.0f) * 0.5f;
+      hieghtMapData[i * 4096 + j] = 0;
+    }
+  }
+
+  {
+    int octave_num = 8;
+    
+    float A = 1.0f;
+    float f = 1.0f / 4096.0f;
+    float d = 0.0f;
+    for (int k = 0; k < octave_num; ++k)
+    {
+      for (int i = 0; i < 4096; ++i)
+      {
+        for (int j = 0; j < 4096; ++j)
+        {
+          hieghtMapData[i * 4096 + j] += A * perlin(j * f + d, i * f + d);
+        }
+      }
+      A /= 2.0f;
+      f *= 2.0f;
+      d += 0.011f;
+    }
+    
+    for (int i = 0; i < 4096; ++i)
+    {
+      for (int j = 0; j < 4096; ++j)
+      {
+        hieghtMapData[i * 4096 + j] = (hieghtMapData[i * 4096 + j] + 1.0f) * 0.5f;
+      }
     }
   }
 

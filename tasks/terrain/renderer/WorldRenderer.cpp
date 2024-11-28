@@ -297,8 +297,7 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout 
 
   cmd_buf.pushConstants(
     pipeline_layout,
-    vk::ShaderStageFlagBits::eTessellationEvaluation |
-    vk::ShaderStageFlagBits::eTessellationControl,
+    vk::ShaderStageFlagBits::eTessellationEvaluation,
     0,
     sizeof(PushConstants),
     &pushConstMC);
@@ -316,20 +315,20 @@ void WorldRenderer::renderWorld(
     ETNA_PROFILE_GPU(cmd_buf, renderForward);
 
     cullScene(cmd_buf, cullingPipeline.getVkPipelineLayout());
-
+    
     {
       etna::RenderTargetState renderTargets(
         cmd_buf,
         {{0, 0}, {resolution.x, resolution.y}},
         {{.image = target_image, .view = target_image_view}},
         {.image = mainViewDepth.get(), .view = mainViewDepth.getView({})});
-
+    
       renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
     }
-
+    
     {
       vk::ImageMemoryBarrier2 barriers[] = {{}};
-
+    
       barriers[0] = vk::ImageMemoryBarrier2{
         .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
         .srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -344,13 +343,13 @@ void WorldRenderer::renderWorld(
           .layerCount = 1,
         }
       };
-
+    
       vk::DependencyInfo depInfo{
         .dependencyFlags = vk::DependencyFlagBits::eByRegion,
         .imageMemoryBarrierCount = 1,
         .pImageMemoryBarriers = barriers,
       };
-
+    
       cmd_buf.pipelineBarrier2(depInfo);
     }
 
