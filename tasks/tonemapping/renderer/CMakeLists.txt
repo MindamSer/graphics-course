@@ -11,6 +11,8 @@ target_link_libraries(tonemapping_renderer
 
 target_add_shaders(tonemapping_renderer
   shaders/gpu_culling.comp
+  shaders/HDR_to_LDR.frag
+  shaders/HDR_to_LDR.vert
   shaders/static_mesh.frag
   shaders/static_mesh.vert
   shaders/terrain.vert

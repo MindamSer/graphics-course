@@ -419,7 +419,7 @@ void SceneManager::genHieghtMap()
     .format = vk::Format::eR32Sfloat,
     .imageUsage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage});\
 
-  hieghtMapSampler = etna::Sampler::Sampler(etna::Sampler::CreateInfo{
+  hieghtMapSampler = etna::Sampler(etna::Sampler::CreateInfo{
     .addressMode = vk::SamplerAddressMode::eMirroredRepeat, .name = "hieghtMapSampler"});
 
   float* hieghtMapData = new float[4096 * 4096];
@@ -433,7 +433,7 @@ void SceneManager::genHieghtMap()
   }
 
   {
-    int octave_num = 8;
+    int octave_num = 1;
     
     float A = 1.0f;
     float f = 1.0f / 4096.0f;
