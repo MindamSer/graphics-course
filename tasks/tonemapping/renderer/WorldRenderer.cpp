@@ -29,11 +29,19 @@ void WorldRenderer::allocateResources(glm::uvec2 swapchain_resolution)
     .extent = vk::Extent3D{resolution.x, resolution.y, 1},
     .name = "HDR_image",
     .format = vk::Format::eB10G11R11UfloatPack32,
-    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled |
+      vk::ImageUsageFlagBits::eStorage,
   });
 
   HDRSampler = etna::Sampler(etna::Sampler::CreateInfo{
     .addressMode = vk::SamplerAddressMode::eRepeat, .name = "HDRSampler"});
+
+  luminanceBuffer = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = 128 * sizeof(std::uint32_t),
+    .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "luminanceBuffer",
+  });
 }
 
 void WorldRenderer::loadScene(std::filesystem::path path)
@@ -49,6 +57,10 @@ void WorldRenderer::loadShaders()
   etna::create_program(
     "culling_shader", 
     {TONEMAPPING_RENDERER_SHADERS_ROOT "gpu_culling.comp.spv"});
+
+  etna::create_program(
+    "tonmap_shader", 
+    {TONEMAPPING_RENDERER_SHADERS_ROOT "tonmap.comp.spv"});
 
   etna::create_program(
     "static_mesh_material",
@@ -83,6 +95,9 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
 
   cullingPipeline = {};
   cullingPipeline = pipelineManager.createComputePipeline("culling_shader", {});
+
+  tonmapPipeline = {};
+  tonmapPipeline = pipelineManager.createComputePipeline("tonmap_shader", {});
 
   staticMeshPipeline = {};
   staticMeshPipeline = pipelineManager.createGraphicsPipeline(
@@ -342,6 +357,55 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout 
   cmd_buf.draw(4, 64*64, 0, 0);
 }
 
+void WorldRenderer::postProcess(vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
+{
+  {
+    vk::BufferMemoryBarrier2 barriers[] = {{}};
+
+    barriers[0] = vk::BufferMemoryBarrier2{
+      .srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+      .srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
+      .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+      .dstAccessMask = vk::AccessFlagBits2::eShaderWrite,
+      .buffer = luminanceBuffer.get(),
+      .offset = 0,
+      .size = vk::WholeSize,
+    };
+
+    vk::DependencyInfo depInfo{
+      .dependencyFlags = vk::DependencyFlagBits::eByRegion,
+      .bufferMemoryBarrierCount = 1,
+      .pBufferMemoryBarriers = barriers,
+    };
+
+    cmd_buf.pipelineBarrier2(depInfo);
+  }
+
+  auto simpleComputeInfo = etna::get_shader_program("tonmap_shader");
+
+  auto set = etna::create_descriptor_set(
+    simpleComputeInfo.getDescriptorLayoutId(0),
+    cmd_buf,
+    {
+      etna::Binding{0, luminanceBuffer.genBinding()},
+      etna::Binding{1, HDRImage.genBinding(HDRSampler.get(), vk::ImageLayout::eGeneral)},
+    });
+
+  vk::DescriptorSet vkSet = set.getVkSet();
+
+  cmd_buf.bindPipeline(vk::PipelineBindPoint::eCompute, tonmapPipeline.getVkPipeline());
+
+  cmd_buf.bindDescriptorSets(
+    vk::PipelineBindPoint::eCompute, pipeline_layout, 0, 1, &vkSet, 0, nullptr);
+
+  cmd_buf.pushConstants(
+    pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(glm::uvec2), &resolution);
+
+  etna::flush_barriers(cmd_buf);
+
+  cmd_buf.dispatch((resolution.x + 31) / 32, (resolution.y + 31) / 32, 1);
+}
+
 void WorldRenderer::copyHDRtoLDR(
   vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
@@ -386,9 +450,9 @@ void WorldRenderer::renderWorld(
     
     etna::flush_barriers(cmd_buf);
 
-    {
-      cullScene(cmd_buf, cullingPipeline.getVkPipelineLayout());
+    cullScene(cmd_buf, cullingPipeline.getVkPipelineLayout());
 
+    {
       etna::RenderTargetState renderTargets(
         cmd_buf,
         {{0, 0}, {resolution.x, resolution.y}},
@@ -399,6 +463,18 @@ void WorldRenderer::renderWorld(
 
       renderTerrain(cmd_buf, terrainPipeline.getVkPipelineLayout());
     }
+
+    etna::set_state(
+      cmd_buf,
+      HDRImage.get(),
+      vk::PipelineStageFlagBits2::eComputeShader,
+      vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite,
+      vk::ImageLayout::eGeneral,
+      vk::ImageAspectFlagBits::eColor);
+
+    etna::flush_barriers(cmd_buf);
+
+    postProcess(cmd_buf, tonmapPipeline.getVkPipelineLayout());
 
     etna::set_state(
       cmd_buf,
