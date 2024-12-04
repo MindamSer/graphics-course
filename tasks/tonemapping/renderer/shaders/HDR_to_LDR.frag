@@ -4,12 +4,17 @@
 
 
 
-layout(push_constant) uniform params
-{
-  vec2 res;
-} pushConstant;
-
 layout(binding = 0) uniform sampler2D colorTex;
+
+layout(binding = 1) readonly buffer MaxLuminanceBuffer
+{
+  float maxLuminanceBuf;
+};
+
+layout(binding = 2) readonly buffer LuminanceHistBuffer
+{
+  float luminanceHistBuf[];
+};
 
 layout (location = 0 ) in VS_OUT
 {
@@ -20,6 +25,22 @@ layout(location = 0) out vec4 out_fragColor;
 
 
 
+float log10(float x)
+{
+    return log(x) / log(10.f);
+}
+
+float minLum = 1.e-4f;
+float minLogLum = log10(minLum);
+float maxLogLum = log10(maxLuminanceBuf);
+
+
+
 void main() {
-    out_fragColor = textureLod(colorTex, surf.texCoord, 0);
+    vec4 HDRColor = textureLod(colorTex, surf.texCoord, 0);
+    float logLum = log10(max( minLum, (0.3f * HDRColor.r + 0.59f * HDRColor.g + 0.11f * HDRColor.b) ));
+    float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
+    int logLumLevel = int(floor(normLogLum * 256.0f));
+
+    out_fragColor = HDRColor;
 }

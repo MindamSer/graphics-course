@@ -22,6 +22,7 @@ void Renderer::initVulkan(std::span<const char*> instance_extensions)
   std::vector<const char*> deviceExtensions;
 
   deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+  deviceExtensions.push_back(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME);
 
   etna::initialize(etna::InitParams{
     .applicationName = "model_bakery_renderer",

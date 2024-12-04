@@ -38,7 +38,7 @@ private:
   void renderTerrain(
     vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
   void postProcess(
-    vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
+    vk::CommandBuffer cmd_buf);
   void copyHDRtoLDR(
     vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
 
@@ -70,6 +70,9 @@ private:
   etna::Sampler HDRSampler;
   etna::GraphicsPipeline HDRtoLDRPipeline{};
 
-  etna::ComputePipeline tonmapPipeline;
-  etna::Buffer luminanceBuffer;
+  etna::ComputePipeline tonmap0Pipeline;
+  etna::ComputePipeline tonmap1Pipeline;
+  etna::ComputePipeline tonmap2Pipeline;
+  etna::Buffer maxLuminanceBuffer;
+  etna::Buffer luminanceHistBuffer;
 };

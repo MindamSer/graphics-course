@@ -19,5 +19,7 @@ target_add_shaders(tonemapping_renderer
   shaders/terrain.tesc
   shaders/terrain.tese
   shaders/terrain.frag
-  shaders/tonmap.comp
+  shaders/tonmap0.comp
+  shaders/tonmap1.comp
+  shaders/tonmap2.comp
 )
