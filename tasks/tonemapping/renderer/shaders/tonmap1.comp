@@ -14,7 +14,7 @@ layout(binding = 0, rgba8) uniform image2D colorTex;
 
 layout(binding = 1) buffer MaxLuminanceBuffer
 {
-  float maxLuminanceBuf;
+  float maxLuminanceBuf[];
 };
 
 layout(binding = 2) buffer LuminanceHistBuffer
@@ -30,8 +30,8 @@ float log10(float x)
 }
 
 float minLum = 1.e-4f;
-float minLogLum = log10(minLum);
-float maxLogLum = minLogLum;
+float minLogLum = log10(maxLuminanceBuf[0]);
+float maxLogLum = log10(maxLuminanceBuf[1]);
 
 
 
@@ -45,8 +45,6 @@ void main() {
     return;
   }
 
-  maxLogLum = log10(maxLuminanceBuf);
-  memoryBarrierBuffer();
   barrier();
 
 

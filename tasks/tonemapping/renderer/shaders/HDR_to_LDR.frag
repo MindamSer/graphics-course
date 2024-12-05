@@ -8,7 +8,7 @@ layout(binding = 0) uniform sampler2D colorTex;
 
 layout(binding = 1) readonly buffer MaxLuminanceBuffer
 {
-  float maxLuminanceBuf;
+  float maxLuminanceBuf[];
 };
 
 layout(binding = 2) readonly buffer LuminanceHistBuffer
@@ -31,8 +31,8 @@ float log10(float x)
 }
 
 float minLum = 1.e-4f;
-float minLogLum = log10(minLum);
-float maxLogLum = log10(maxLuminanceBuf);
+float minLogLum = log10(maxLuminanceBuf[0]);
+float maxLogLum = log10(maxLuminanceBuf[1]);
 
 
 
@@ -41,6 +41,7 @@ void main() {
     float logLum = log10(max( minLum, (0.3f * HDRColor.r + 0.59f * HDRColor.g + 0.11f * HDRColor.b) ));
     float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
     int logLumLevel = int(floor(normLogLum * 256.0f));
+    float histValue = luminanceHistBuf[logLumLevel];
 
     out_fragColor = HDRColor;
 }

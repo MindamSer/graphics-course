@@ -38,7 +38,7 @@ void WorldRenderer::allocateResources(glm::uvec2 swapchain_resolution)
     .addressMode = vk::SamplerAddressMode::eRepeat, .name = "HDRSampler"});
 
   maxLuminanceBuffer = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = 1 * sizeof(float),
+    .size = 2 * sizeof(float),
     .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
     .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
     .name = "luminanceBuffer",
@@ -423,6 +423,29 @@ void WorldRenderer::postProcess(vk::CommandBuffer cmd_buf)
       maxLuminanceBuffer.get(), 0, vk::WholeSize, std::bit_cast<std::uint32_t>(0.f));
     cmd_buf.fillBuffer(
       luminanceHistBuffer.get(), 0, vk::WholeSize, std::bit_cast<std::uint32_t>(0.f));
+
+    barriers[0] = vk::BufferMemoryBarrier2{
+      .srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
+      .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+      .dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
+      .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+      .buffer = maxLuminanceBuffer.get(),
+      .offset = 0,
+      .size = vk::WholeSize,
+    };
+
+    {
+      vk::DependencyInfo depInfo{
+        .dependencyFlags = vk::DependencyFlagBits::eByRegion,
+        .bufferMemoryBarrierCount = 1,
+        .pBufferMemoryBarriers = barriers,
+      };
+
+      cmd_buf.pipelineBarrier2(depInfo);
+    }
+
+    cmd_buf.fillBuffer(
+      maxLuminanceBuffer.get(), 0, sizeof(float), 0x7FFFFFFF);
 
     barriers[0] = vk::BufferMemoryBarrier2{
       .srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
