@@ -200,6 +200,7 @@ void WorldRenderer::update(const FramePacket& packet)
 void WorldRenderer::cullScene(
   vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
+  ETNA_PROFILE_GPU(cmd_buf, cullingScene);
   {
     vk::BufferMemoryBarrier2 barriers[] = {{}, {}, {}};
 
@@ -319,6 +320,8 @@ void WorldRenderer::cullScene(
 void WorldRenderer::renderScene(
   vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
+  ETNA_PROFILE_GPU(cmd_buf, renderScene);
+
   if (!sceneMgr->getVertexBuffer())
     return;
 
@@ -355,6 +358,8 @@ void WorldRenderer::renderScene(
 
 void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
+  ETNA_PROFILE_GPU(cmd_buf, renderTerrain);
+
   auto simpleGraphicsInfo = etna::get_shader_program("terrain_shader");
 
   auto set = etna::create_descriptor_set(
@@ -386,7 +391,10 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout 
 
 void WorldRenderer::postProcess(vk::CommandBuffer cmd_buf)
 {
+  ETNA_PROFILE_GPU(cmd_buf, computePass);
   {
+    ETNA_PROFILE_GPU(cmd_buf, fillingBuffers);
+
     vk::BufferMemoryBarrier2 barriers[] = {{}, {}};
 
     barriers[0] = vk::BufferMemoryBarrier2{
@@ -515,6 +523,8 @@ void WorldRenderer::postProcess(vk::CommandBuffer cmd_buf)
 
 
   {
+    ETNA_PROFILE_GPU(cmd_buf, minMaxCalc);
+
     auto simpleComputeInfo = etna::get_shader_program("tonmap_shader0");
 
     auto set = etna::create_descriptor_set(
@@ -577,6 +587,8 @@ void WorldRenderer::postProcess(vk::CommandBuffer cmd_buf)
 
 
   {
+    ETNA_PROFILE_GPU(cmd_buf, histCalc);
+
     auto simpleComputeInfo = etna::get_shader_program("tonmap_shader1");
 
     auto set = etna::create_descriptor_set(
@@ -630,6 +642,8 @@ void WorldRenderer::postProcess(vk::CommandBuffer cmd_buf)
 
 
   {
+    ETNA_PROFILE_GPU(cmd_buf, probFuncCalc);
+
     auto simpleComputeInfo = etna::get_shader_program("tonmap_shader2");
 
     auto set = etna::create_descriptor_set(

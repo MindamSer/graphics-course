@@ -33,6 +33,7 @@ float minLum = 1.e-4f;
 float minLogLum = log10(maxLuminanceBuf[0]);
 float maxLogLum = log10(maxLuminanceBuf[1]);
 
+shared uint localHist[256];
 
 
 void main() {
@@ -45,6 +46,14 @@ void main() {
     return;
   }
 
+  if (gl_LocalInvocationID.xy == ivec2(0, 0))
+  {
+    for(int i = 0; i < 256; ++i)
+    {
+      localHist[i] = 0;
+    }
+  }
+  memoryBarrierShared();
   barrier();
 
 
@@ -53,7 +62,16 @@ void main() {
   float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
   int logLumLevel = int(floor(normLogLum * 256.0f));
 
-  atomicAdd(luminanceHistBuf[min(logLumLevel, 255)], 1.0f);
-  memoryBarrierBuffer();
+  atomicAdd(localHist[min(logLumLevel, 255)], 1);
+  memoryBarrierShared();
   barrier();
+
+
+  if (gl_LocalInvocationID.xy == ivec2(0, 0))
+  {
+    for(int i = 0; i < 256; ++i)
+    {
+      atomicAdd(luminanceHistBuf[1], float(localHist[i]));
+    }
+  }
 }
