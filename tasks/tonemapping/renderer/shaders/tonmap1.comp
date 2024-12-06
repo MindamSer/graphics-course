@@ -59,19 +59,22 @@ void main() {
 
   vec4 fragColor = imageLoad(colorTex, fragCoord);
   float logLum = log10(max( minLum, (0.3f * fragColor.r + 0.59f * fragColor.g + 0.11f * fragColor.b) ));
-  float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
-  int logLumLevel = int(floor(normLogLum * 256.0f));
-
-  atomicAdd(localHist[min(logLumLevel, 255)], 1);
+  if(logLum > log10(minLum))
+  {
+    float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
+    int logLumLevel = int(floor(normLogLum * 256.0f));
+  
+    atomicAdd(localHist[min(logLumLevel, 255)], 1);
+  }
   memoryBarrierShared();
   barrier();
-
-
+  
+  
   if (gl_LocalInvocationID.xy == ivec2(0, 0))
   {
     for(int i = 0; i < 256; ++i)
     {
-      atomicAdd(luminanceHistBuf[1], float(localHist[i]));
+      atomicAdd(luminanceHistBuf[i], float(localHist[i]));
     }
   }
 }

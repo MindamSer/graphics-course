@@ -39,9 +39,16 @@ float maxLogLum = log10(maxLuminanceBuf[1]);
 void main() {
     vec4 HDRColor = textureLod(colorTex, surf.texCoord, 0);
     float logLum = log10(max( minLum, (0.3f * HDRColor.r + 0.59f * HDRColor.g + 0.11f * HDRColor.b) ));
-    float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
-    int logLumLevel = int(floor(normLogLum * 256.0f));
-    float histValue = luminanceHistBuf[logLumLevel];
-
-    out_fragColor = HDRColor;
+    if (logLum > log10(minLum))
+    {
+      float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
+      int logLumLevel = int(floor(normLogLum * 256.0f));
+      float histValue = luminanceHistBuf[logLumLevel];
+      
+      out_fragColor = vec4(maxLuminanceBuf[0] + (maxLuminanceBuf[1] - maxLuminanceBuf[0]) * histValue);
+    }
+    else
+    {
+      out_fragColor = HDRColor;
+    }
 }
