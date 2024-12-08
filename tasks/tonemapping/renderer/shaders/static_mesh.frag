@@ -19,9 +19,10 @@ void main()
   const vec3 surfaceColor = vec3(1.0f, 1.0f, 1.0f);
 
   const vec3 lightColor = vec3(1.0f, 1.0f, 1.0f);
+  const float lightInens = 1000.f;
 
   const vec3 lightDir   = normalize(wLightPos - surf.wPos);
-  const vec3 diffuse = max(dot(surf.wNorm, lightDir), 0.0f) * lightColor;
+  const vec3 diffuse = max(dot(surf.wNorm, lightDir), 0.0f) * lightColor * lightInens;
   const float ambient = 0.05;
   out_fragColor.rgb = (diffuse + ambient) * surfaceColor;
   out_fragColor.a = 1.0f;

@@ -53,7 +53,6 @@ void main() {
       float histValue = luminanceHistBuf[BwLevel];
       
       float Bde = log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * histValue;
-      Bde = Bwmin + (Bwmax - Bwmin) * histValue;
       float Ld = pow(10, Bde);
 
       out_fragColor = vec4(vec3(Ld), 1.0);
