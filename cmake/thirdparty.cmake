@@ -53,7 +53,7 @@ CPMAddPackage(
 # etna -- our wrapper around Vulkan to make life easier
 CPMAddPackage(
   NAME etna
-  GITHUB_REPOSITORY AlexandrShcherbakov/etna
+  GITHUB_REPOSITORY MindamSer/etna
   VERSION 1.7.0
 )
 
