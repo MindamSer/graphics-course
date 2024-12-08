@@ -17,8 +17,11 @@ void main() {
   {
     luminanceHistBuf[i] += luminanceHistBuf[i - 1];
   }
-  for(int i = 0; i < 256; ++i)
-  {
-    luminanceHistBuf[i] /= luminanceHistBuf[255];
+  if (luminanceHistBuf[255] != 0.f)
+  {  
+    for(int i = 0; i < 256; ++i)
+    {
+      luminanceHistBuf[i] /= luminanceHistBuf[255];
+    }
   }
 }

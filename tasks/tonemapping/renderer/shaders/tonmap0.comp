@@ -9,7 +9,7 @@ layout(push_constant) uniform params
   uvec2 res;
 } pushConstant;
 
-layout(binding = 0, rgba8) uniform image2D colorTex;
+layout(binding = 0, r11f_g11f_b10f) uniform image2D colorTex;
 
 layout(binding = 1) buffer MaxLuminanceBuffer
 {
@@ -44,11 +44,14 @@ void main() {
 
 
   vec4 fragColor = imageLoad(colorTex, fragCoord);
-  float luminance = max(minLum, 0.3f * fragColor.r + 0.59f * fragColor.g + 0.11f * fragColor.b);
-  uint bitFloat = floatBitsToInt(luminance);
+  float luminance = 0.3f * fragColor.r + 0.59f * fragColor.g + 0.11f * fragColor.b;
+  if (luminance >= minLum)
+  {
+    uint bitFloat = floatBitsToInt(luminance);
 
-  atomicMin(localMinLum, bitFloat);
-  atomicMax(localMaxLum, bitFloat);
+    atomicMin(localMinLum, bitFloat);
+    atomicMax(localMaxLum, bitFloat);
+  }
   memoryBarrierShared();
   barrier();
 

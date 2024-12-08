@@ -31,21 +31,32 @@ float log10(float x)
 }
 
 float minLum = 1.e-4f;
-float minLogLum = log10(maxLuminanceBuf[0]);
-float maxLogLum = log10(maxLuminanceBuf[1]);
+float Ldmin = 1.e-4f;
+float Ldmax = 1.f;
+
+float Lwmin = maxLuminanceBuf[0];
+float Lwmax = maxLuminanceBuf[1];
+float Bwmin = log10(Lwmin);
+float Bwmax = log10(Lwmax);
 
 
 
 void main() {
     vec4 HDRColor = textureLod(colorTex, surf.texCoord, 0);
-    float logLum = log10(max( minLum, (0.3f * HDRColor.r + 0.59f * HDRColor.g + 0.11f * HDRColor.b) ));
-    if (logLum > log10(minLum))
+
+    float Lw = 0.3f * HDRColor.r + 0.59f * HDRColor.g + 0.11f * HDRColor.b;
+    if (Lw > minLum)
     {
-      float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
-      int logLumLevel = int(floor(normLogLum * 256.0f));
-      float histValue = luminanceHistBuf[logLumLevel];
+      float Bw = log10(Lw);
+      float normBw = (Bw - Bwmin) / (Bwmax - Bwmin);
+      int BwLevel = min(int(floor(normBw * 256.0f)), 255);
+      float histValue = luminanceHistBuf[BwLevel];
       
-      out_fragColor = vec4(maxLuminanceBuf[0] + (maxLuminanceBuf[1] - maxLuminanceBuf[0]) * histValue);
+      float Bde = log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * histValue;
+      Bde = Bwmin + (Bwmax - Bwmin) * histValue;
+      float Ld = pow(10, Bde);
+
+      out_fragColor = vec4(vec3(Ld), 1.0);
     }
     else
     {
