@@ -650,7 +650,8 @@ void WorldRenderer::postProcess(vk::CommandBuffer cmd_buf)
       simpleComputeInfo.getDescriptorLayoutId(0),
       cmd_buf,
       {
-        etna::Binding{0, luminanceHistBuffer.genBinding()},
+        etna::Binding{0, maxLuminanceBuffer.genBinding()},
+        etna::Binding{1, luminanceHistBuffer.genBinding()},
       });
 
     vk::DescriptorSet vkSet = set.getVkSet();
