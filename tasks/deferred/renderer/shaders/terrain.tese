@@ -10,8 +10,6 @@ layout(push_constant) uniform params
 {
   mat4 mProjView;
   vec3 cameraPos;
-  uint instanceCount;
-  uint relemCount;
 } pushConstant;
 
 layout(binding = 0) uniform sampler2D colorTex;

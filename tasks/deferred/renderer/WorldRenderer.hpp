@@ -51,13 +51,27 @@ private:
   etna::Image mainViewDepth;
   etna::Buffer constants;
 
-  struct PushConstants
+  struct renderConstants
   {
+    glm::uvec2 res;
     glm::mat4x4 projView;
     glm::vec3 cameraPos;
     std::uint32_t instanceCount;
     std::uint32_t relemCount;
-  } pushConstMC;
+  } renderConstants;
+
+  struct cullingPushConstants
+  {
+    glm::mat4x4 mProjView;
+    std::uint32_t instanceCount;
+    std::uint32_t relemCount;
+  } cullingPC;
+
+  struct terrainTesEvalPushConstants
+  {
+    glm::mat4x4 mProjView;
+    glm::vec3 cameraPos;
+  } terranTesPC;
 
   glm::mat4x4 worldViewProj;
   glm::mat4x4 lightMatrix;

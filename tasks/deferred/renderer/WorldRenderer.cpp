@@ -16,6 +16,8 @@ void WorldRenderer::allocateResources(glm::uvec2 swapchain_resolution)
 {
   resolution = swapchain_resolution;
 
+  renderConstants.res = resolution;
+
   auto& ctx = etna::get_context();
 
   mainViewDepth = ctx.createImage(etna::Image::CreateInfo{
@@ -83,8 +85,8 @@ void WorldRenderer::loadScene(std::filesystem::path path)
 {
   sceneMgr->selectScene(path);
 
-  pushConstMC.instanceCount = static_cast<std::uint32_t>(sceneMgr->getInstanceMatrices().size());
-  pushConstMC.relemCount = static_cast<std::uint32_t>(sceneMgr->getRenderElements().size());
+  renderConstants.instanceCount = static_cast<std::uint32_t>(sceneMgr->getInstanceMatrices().size());
+  renderConstants.relemCount = static_cast<std::uint32_t>(sceneMgr->getRenderElements().size());
 }
 
 void WorldRenderer::loadShaders()
@@ -255,8 +257,8 @@ void WorldRenderer::update(const FramePacket& packet)
   // calc camera matrix
   {
     const float aspect = float(resolution.x) / float(resolution.y);
-    pushConstMC.projView = packet.mainCam.projTm(aspect) * packet.mainCam.viewTm();
-    pushConstMC.cameraPos = packet.mainCam.position;
+    renderConstants.projView = packet.mainCam.projTm(aspect) * packet.mainCam.viewTm();
+    renderConstants.cameraPos = packet.mainCam.position;
   }
 }
 
@@ -329,13 +331,20 @@ void WorldRenderer::cullScene(
     vk::PipelineBindPoint::eCompute, pipeline_layout, 
     0, 1, &vkSet, 0, nullptr);
 
+  cullingPC = 
+  {
+    .mProjView = renderConstants.projView,
+    .instanceCount = renderConstants.instanceCount,
+    .relemCount = renderConstants.relemCount,
+  };
+
   cmd_buf.pushConstants(
     pipeline_layout, vk::ShaderStageFlagBits::eCompute, 
-    0, sizeof(PushConstants), &pushConstMC);
+    0, sizeof(cullingPushConstants), &cullingPC);
 
   etna::flush_barriers(cmd_buf);
 
-  cmd_buf.dispatch((pushConstMC.instanceCount + 255) / 256, 1, 1);
+  cmd_buf.dispatch((cullingPC.instanceCount + 255) / 256, 1, 1);
 
   {
     vk::BufferMemoryBarrier2 barriers[] = {{}, {}, {}};
@@ -411,7 +420,7 @@ void WorldRenderer::renderScene(
 
   cmd_buf.pushConstants(
     pipeline_layout, vk::ShaderStageFlagBits::eVertex, 
-    0, sizeof(PushConstants), &pushConstMC);
+    0, sizeof(glm::mat4x4), &(renderConstants.projView));
 
   cmd_buf.drawIndexedIndirect(
     sceneMgr->getDrawCmdBuffer()->get(), 0, static_cast<std::uint32_t>(sceneMgr->getRenderElements().size()), 0);
@@ -440,12 +449,16 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout 
   cmd_buf.bindDescriptorSets(
     vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, 1, &vkSet, 0, nullptr);
 
+  terranTesPC = 
+  {
+    .mProjView = renderConstants.projView,
+    .cameraPos = renderConstants.cameraPos,
+  };
+
   cmd_buf.pushConstants(
     pipeline_layout,
     vk::ShaderStageFlagBits::eTessellationEvaluation,
-    0,
-    sizeof(PushConstants),
-    &pushConstMC);
+    0, sizeof(terrainTesEvalPushConstants), &terranTesPC);
 
   cmd_buf.draw(4, 64*64, 0, 0);
 }
@@ -469,6 +482,10 @@ void WorldRenderer::deferredShading(vk::CommandBuffer cmd_buf, vk::PipelineLayou
 
   cmd_buf.bindDescriptorSets(
     vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, 1, &vkSet, 0, nullptr);
+
+  cmd_buf.pushConstants(
+    pipeline_layout, vk::ShaderStageFlagBits::eFragment, 
+    0, sizeof(renderConstants), &renderConstants);
 
   cmd_buf.draw(3, 1, 0, 0);
 }

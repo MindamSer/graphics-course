@@ -12,6 +12,17 @@ layout(binding = 2, r32f) readonly uniform image2D depthTex;
 
 
 
+layout(push_constant) uniform params
+{
+  uvec2 res;
+  mat4 mProjView;
+  vec3 cameraPos;
+  uint instanceCount;
+  uint relemCount;
+} pushConstant;
+
+
+
 layout (location = 0 ) in VS_OUT
 {
   vec2 texCoord;
@@ -23,10 +34,10 @@ layout(location = 0) out vec4 out_fragColor;
 
 void main() {
   ivec2 pixelCoord = ivec2(gl_FragCoord.xy);
+  float depthValue = imageLoad(normalTex, pixelCoord).r;
 
   float albedoValue = imageLoad(normalTex, pixelCoord).r;
   vec4 normalValue = imageLoad(normalTex, pixelCoord);
-  float depthValue = imageLoad(normalTex, pixelCoord).r;
 
   out_fragColor = vec4(albedoValue);
   out_fragColor = normalValue;

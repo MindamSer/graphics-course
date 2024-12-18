@@ -4,6 +4,13 @@
 
 #include "unpack_attributes.glsl"
 
+
+
+layout(push_constant) uniform params
+{
+  mat4 mProjView;
+} pushConstant;
+
 layout(binding = 0) readonly buffer MatricesBuffer
 {
     mat4x4 InstMatricesBuf[];
@@ -14,6 +21,7 @@ layout(binding = 1) readonly buffer DrawMatricesIndBuffer
 };
 
 layout(location = 0) in vec4 vPosNorm;
+
 layout(location = 1) in vec4 vTexCoordAndTang;
 
 layout (location = 0 ) out VS_OUT
@@ -24,15 +32,9 @@ layout (location = 0 ) out VS_OUT
   vec2 texCoord;
 } vOut;
 
-layout(push_constant) uniform params
-{
-  mat4 mProjView;
-  vec3 cameraPos;
-  uint instanceCount;
-  uint relemCount;
-} pushConstant;
-
 out gl_PerVertex { vec4 gl_Position; };
+
+
 
 void main(void)
 {
