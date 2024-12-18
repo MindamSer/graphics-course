@@ -468,6 +468,38 @@ void SceneManager::genHieghtMap()
   delete[] hieghtMapData;
 }
 
+void SceneManager::genLightSources()
+{
+  lights = 
+  {
+    LightSource
+    {
+      .pos = {-2.f, 2.f, 0.f, 1.f}, 
+      .dir = {},
+      .color = {1.f, 0.f, 0.f, 1.f},
+    },
+    LightSource{
+      .pos = {0.f, 2.f, 0.f, 1.f},
+      .dir = {},
+      .color = {0.f, 1.f, 0.f, 1.f},
+    },
+    LightSource{
+      .pos = {2.f, 2.f, 0.f, 1.f},
+      .dir = {},
+      .color = {0.f, 0.f, 1.f, 1.f},
+    },
+  };
+
+  unifiedLightSourcesBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = lights.size() * sizeof(LightSource),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedLightSourcesBuf",
+  });
+
+  transferHelper.uploadBuffer<LightSource>(*oneShotCommands, unifiedLightSourcesBuf, 0, lights);
+}
+
 void SceneManager::uploadData(
   std::span<const Vertex> vertices, std::span<const std::uint32_t> indices)
 {
@@ -566,6 +598,8 @@ void SceneManager::uploadData(
     *oneShotCommands, unifiedMatricesOffsetsIndBuf, 0, matricesOffsetsInd);
 
   genHieghtMap();
+
+  genLightSources();
 }
 
 void SceneManager::selectScene(std::filesystem::path path)

@@ -37,6 +37,13 @@ struct RenderElementBoundingBox
   glm::vec3 min_pos;
 };
 
+struct LightSource
+{
+  glm::vec4 pos;
+  glm::vec4 dir;
+  glm::vec4 color;
+};
+
 class SceneManager
 {
 public:
@@ -69,6 +76,9 @@ public:
 
   etna::Image* getHieghtMapImage() { return &hieghtMap; }
   etna::Sampler* getHieghtMapSampler() { return &hieghtMapSampler; };
+
+  etna::Buffer* getLightSourcesBuffer() { return &unifiedLightSourcesBuf; }
+  std::span<const LightSource> getLightSources() { return lights; }
 
   etna::VertexByteStreamFormatDescription getVertexFormatDescription();
 
@@ -135,4 +145,8 @@ private:
   etna::Image hieghtMap;
   etna::Sampler hieghtMapSampler;
   void genHieghtMap();
+
+  std::vector<LightSource> lights;
+  etna::Buffer unifiedLightSourcesBuf;
+  void genLightSources();
 };

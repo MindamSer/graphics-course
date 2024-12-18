@@ -56,13 +56,13 @@ private:
 
   struct RenderConstants
   {
-    glm::uvec2 res;
     glm::mat4x4 proj;
     glm::mat4x4 view;
     glm::mat4x4 projView;
-    glm::vec3 cameraPos;
     std::uint32_t instanceCount;
     std::uint32_t relemCount;
+    std::uint32_t lightsCount;
+    glm::vec3 cameraPos;
   } renderConstants;
 
   struct CullingPushConstants

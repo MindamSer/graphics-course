@@ -16,8 +16,6 @@ void WorldRenderer::allocateResources(glm::uvec2 swapchain_resolution)
 {
   resolution = swapchain_resolution;
 
-  renderConstants.res = resolution;
-
   auto& ctx = etna::get_context();
 
   mainViewDepth = ctx.createImage(etna::Image::CreateInfo{
@@ -87,6 +85,7 @@ void WorldRenderer::loadScene(std::filesystem::path path)
 
   renderConstants.instanceCount = static_cast<std::uint32_t>(sceneMgr->getInstanceMatrices().size());
   renderConstants.relemCount = static_cast<std::uint32_t>(sceneMgr->getRenderElements().size());
+  renderConstants.lightsCount = static_cast<std::uint32_t>(sceneMgr->getLightSources().size());
 }
 
 void WorldRenderer::loadShaders()
@@ -486,6 +485,7 @@ void WorldRenderer::deferredShading(
       etna::Binding{0, gBuffer.Albedo.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding{1, gBuffer.Normal.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding{2, gBuffer.Depth.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding{3, sceneMgr->getLightSourcesBuffer()->genBinding()},
     });
 
   vk::DescriptorSet vkSet = set.getVkSet();
