@@ -4,22 +4,22 @@
 
 
 
-layout(binding = 0, r32f) readonly uniform image2D albedoTex;
-
-layout(binding = 1, rgba8) readonly uniform image2D normalTex;
-
-layout(binding = 2, r32f) readonly uniform image2D depthTex;
-
-
-
 layout(push_constant) uniform params
 {
   uvec2 res;
-  mat4 mProjView;
+  mat4 proj;
+  mat4 view;
+  mat4 projView;
   vec3 cameraPos;
   uint instanceCount;
   uint relemCount;
 } pushConstant;
+
+layout(binding = 0) uniform sampler2D albedoTex;
+
+layout(binding = 1) uniform sampler2D normalTex;
+
+layout(binding = 2) uniform sampler2D depthTex;
 
 
 
@@ -33,11 +33,13 @@ layout(location = 0) out vec4 out_fragColor;
 
 
 void main() {
-  ivec2 pixelCoord = ivec2(gl_FragCoord.xy);
-  float depthValue = imageLoad(normalTex, pixelCoord).r;
+  float albedoValue = textureLod(albedoTex, surf.texCoord, 0).r;
+  vec4 normalValue = textureLod(normalTex, surf.texCoord, 0);
+  float depthValue = textureLod(depthTex, surf.texCoord, 0).r;
 
-  float albedoValue = imageLoad(normalTex, pixelCoord).r;
-  vec4 normalValue = imageLoad(normalTex, pixelCoord);
+  vec4 screenSpaceCoords = vec4(surf.texCoord * 2.0f - 1.0f, depthValue, 1.0f);
+  vec4 viewSpaceCoords = inverse(pushConstant.proj) * screenSpaceCoords;
+  viewSpaceCoords /= viewSpaceCoords.w;
 
   out_fragColor = vec4(albedoValue);
   out_fragColor = normalValue;

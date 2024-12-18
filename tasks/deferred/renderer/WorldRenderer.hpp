@@ -48,49 +48,53 @@ private:
 private:
   std::unique_ptr<SceneManager> sceneMgr;
 
-  etna::Image mainViewDepth;
-  etna::Buffer constants;
 
-  struct renderConstants
+  etna::Image mainViewDepth;
+  etna::Sampler quadSampler;
+  glm::uvec2 resolution;
+
+
+  struct RenderConstants
   {
     glm::uvec2 res;
+    glm::mat4x4 proj;
+    glm::mat4x4 view;
     glm::mat4x4 projView;
     glm::vec3 cameraPos;
     std::uint32_t instanceCount;
     std::uint32_t relemCount;
   } renderConstants;
 
-  struct cullingPushConstants
+  struct CullingPushConstants
   {
-    glm::mat4x4 mProjView;
+    glm::mat4x4 projView;
     std::uint32_t instanceCount;
     std::uint32_t relemCount;
   } cullingPC;
 
-  struct terrainTesEvalPushConstants
+  struct ScenePushConstants
   {
-    glm::mat4x4 mProjView;
-    glm::vec3 cameraPos;
-  } terranTesPC;
+    glm::mat4x4 projView;
+  } scenePC;
 
-  glm::mat4x4 worldViewProj;
-  glm::mat4x4 lightMatrix;
+  struct TerrainPushConstants
+  {
+    glm::mat4x4 projView;
+    glm::vec3 cameraPos;
+  } terrainPC;
+
+  struct DeferredPushConstants
+  {
+    glm::mat4x4 projView;
+    glm::vec3 cameraPos;
+  } deferredPC;
+
 
   etna::ComputePipeline cullingPipeline{};
+
   etna::GraphicsPipeline staticMeshPipeline{};
   etna::GraphicsPipeline terrainPipeline{};
 
-  glm::uvec2 resolution;
-
-  etna::Image HDRImage;
-  etna::Sampler HDRSampler;
-  etna::GraphicsPipeline HDRtoLDRPipeline{};
-
-  etna::ComputePipeline tonmap0Pipeline;
-  etna::ComputePipeline tonmap1Pipeline;
-  etna::ComputePipeline tonmap2Pipeline;
-  etna::Buffer maxLuminanceBuffer;
-  etna::Buffer luminanceHistBuffer;
 
   struct GBuffer
   {
@@ -98,6 +102,16 @@ private:
     etna::Image Normal;
     etna::Image Depth;
   } gBuffer;
-
   etna::GraphicsPipeline defferedShadingPipeline{};
+
+
+  etna::Buffer maxLuminanceBuffer;
+  etna::Buffer luminanceHistBuffer;
+  etna::ComputePipeline tonmap0Pipeline;
+  etna::ComputePipeline tonmap1Pipeline;
+  etna::ComputePipeline tonmap2Pipeline;
+
+
+  etna::Image HDRImage;
+  etna::GraphicsPipeline HDRtoLDRPipeline{};
 };
