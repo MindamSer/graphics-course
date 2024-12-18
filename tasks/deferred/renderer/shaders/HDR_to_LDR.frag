@@ -61,4 +61,6 @@ void main() {
     {
       out_fragColor = HDRColor;
     }
+
+    out_fragColor = HDRColor;
 }

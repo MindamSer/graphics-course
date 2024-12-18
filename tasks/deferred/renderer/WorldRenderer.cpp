@@ -50,6 +50,33 @@ void WorldRenderer::allocateResources(glm::uvec2 swapchain_resolution)
     .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
     .name = "luminanceBuffer",
   });
+
+  gBuffer = {
+    .Albedo = ctx.createImage(etna::Image::CreateInfo{
+      .extent = vk::Extent3D{resolution.x, resolution.y, 1},
+      .name = "G_buffer_albedo",
+      .format = vk::Format::eR32Sfloat,
+      .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | 
+                    vk::ImageUsageFlagBits::eSampled |
+                    vk::ImageUsageFlagBits::eStorage,
+    }),
+    .Normal = ctx.createImage(etna::Image::CreateInfo{
+      .extent = vk::Extent3D{resolution.x, resolution.y, 1},
+      .name = "G_buffer_normal",
+      .format = vk::Format::eR8G8B8A8Snorm,
+      .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | 
+                    vk::ImageUsageFlagBits::eSampled |
+                    vk::ImageUsageFlagBits::eStorage,
+    }),
+    .Depth = ctx.createImage(etna::Image::CreateInfo{
+      .extent = vk::Extent3D{resolution.x, resolution.y, 1},
+      .name = "G_buffer_depth",
+      .format = vk::Format::eD32Sfloat,
+      .imageUsage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
+                    vk::ImageUsageFlagBits::eSampled |
+                    vk::ImageUsageFlagBits::eStorage,
+    }),
+  };
 }
 
 void WorldRenderer::loadScene(std::filesystem::path path)
@@ -83,9 +110,6 @@ void WorldRenderer::loadShaders()
     "static_mesh_material",
     {DEFERRED_RENDERER_SHADERS_ROOT "static_mesh.frag.spv",
      DEFERRED_RENDERER_SHADERS_ROOT "static_mesh.vert.spv"});
-  etna::create_program(
-    "static_mesh", 
-    {DEFERRED_RENDERER_SHADERS_ROOT "static_mesh.vert.spv"});
 
   etna::create_program(
     "terrain_shader",
@@ -93,6 +117,11 @@ void WorldRenderer::loadShaders()
      DEFERRED_RENDERER_SHADERS_ROOT "terrain.tesc.spv",
      DEFERRED_RENDERER_SHADERS_ROOT "terrain.tese.spv",
      DEFERRED_RENDERER_SHADERS_ROOT "terrain.frag.spv"});
+
+  etna::create_program(
+    "deferred_shader",
+    {DEFERRED_RENDERER_SHADERS_ROOT "deferred.vert.spv",
+     DEFERRED_RENDERER_SHADERS_ROOT "deferred.frag.spv"});
 
 
   etna::create_program(
@@ -136,9 +165,17 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
           .frontFace = vk::FrontFace::eCounterClockwise,
           .lineWidth = 1.f,
         },
+      .blendingConfig = 
+        {
+          .attachments =
+            {{.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | 
+                                vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,}, 
+             {.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                                vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,}},
+        },
       .fragmentShaderOutput =
         {
-          .colorAttachmentFormats = {vk::Format::eB10G11R11UfloatPack32},
+          .colorAttachmentFormats = {vk::Format::eR32Sfloat, vk::Format::eR8G8B8A8Snorm},
           .depthAttachmentFormat = vk::Format::eD32Sfloat,
         },
     });
@@ -149,6 +186,32 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
     etna::GraphicsPipeline::CreateInfo{
       .inputAssemblyConfig = {.topology = vk::PrimitiveTopology::ePatchList},
       .tessellationConfig = {.patchControlPoints = 4},
+      .rasterizationConfig =
+        vk::PipelineRasterizationStateCreateInfo{
+          .polygonMode = vk::PolygonMode::eFill,
+          .cullMode = vk::CullModeFlagBits::eBack,
+          .frontFace = vk::FrontFace::eCounterClockwise,
+          .lineWidth = 1.f,
+        },
+      .blendingConfig = 
+        {
+          .attachments =
+            {{.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | 
+                                vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,}, 
+             {.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                                vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,}},
+        },
+      .fragmentShaderOutput =
+        {
+          .colorAttachmentFormats = {vk::Format::eR32Sfloat, vk::Format::eR8G8B8A8Snorm},
+          .depthAttachmentFormat = vk::Format::eD32Sfloat,
+        },
+    });
+
+  defferedShadingPipeline = {};
+  defferedShadingPipeline = pipelineManager.createGraphicsPipeline(
+    "deferred_shader",
+    etna::GraphicsPipeline::CreateInfo{
       .rasterizationConfig =
         vk::PipelineRasterizationStateCreateInfo{
           .polygonMode = vk::PolygonMode::eFill,
@@ -350,8 +413,6 @@ void WorldRenderer::renderScene(
     pipeline_layout, vk::ShaderStageFlagBits::eVertex, 
     0, sizeof(PushConstants), &pushConstMC);
 
-  etna::flush_barriers(cmd_buf);
-
   cmd_buf.drawIndexedIndirect(
     sceneMgr->getDrawCmdBuffer()->get(), 0, static_cast<std::uint32_t>(sceneMgr->getRenderElements().size()), 0);
 }
@@ -387,6 +448,29 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf, vk::PipelineLayout 
     &pushConstMC);
 
   cmd_buf.draw(4, 64*64, 0, 0);
+}
+
+void WorldRenderer::deferredShading(vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
+{
+  auto simpleGraphicsInfo = etna::get_shader_program("deferred_shader");
+
+  auto set = etna::create_descriptor_set(
+    simpleGraphicsInfo.getDescriptorLayoutId(0),
+    cmd_buf,
+    {
+      etna::Binding{0, gBuffer.Albedo.genBinding({}, vk::ImageLayout::eGeneral)},
+      etna::Binding{1, gBuffer.Normal.genBinding({}, vk::ImageLayout::eGeneral)},
+      etna::Binding{2, gBuffer.Depth.genBinding({}, vk::ImageLayout::eGeneral)},
+    });
+
+  vk::DescriptorSet vkSet = set.getVkSet();
+
+  cmd_buf.bindPipeline(vk::PipelineBindPoint::eGraphics, defferedShadingPipeline.getVkPipeline());
+
+  cmd_buf.bindDescriptorSets(
+    vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, 1, &vkSet, 0, nullptr);
+
+  cmd_buf.draw(3, 1, 0, 0);
 }
 
 void WorldRenderer::postProcess(vk::CommandBuffer cmd_buf)
@@ -733,19 +817,48 @@ void WorldRenderer::renderWorld(
 
   // draw final scene to screen
   {
-    ETNA_PROFILE_GPU(cmd_buf, renderForward);
-
     cullScene(cmd_buf, cullingPipeline.getVkPipelineLayout());
 
-    etna::set_state(
-      cmd_buf,
-      HDRImage.get(),
-      vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-      vk::AccessFlagBits2::eColorAttachmentWrite,
-      vk::ImageLayout::eColorAttachmentOptimal,
-      vk::ImageAspectFlagBits::eColor);
-    
-    etna::flush_barriers(cmd_buf);
+    {
+      etna::RenderTargetState renderTargets(
+        cmd_buf,
+        {{0, 0}, {resolution.x, resolution.y}},
+        {{.image = gBuffer.Albedo.get(), .view = gBuffer.Albedo.getView({})}, 
+         {.image = gBuffer.Normal.get(), .view = gBuffer.Normal.getView({})}},
+        {.image = gBuffer.Depth.get(), .view = gBuffer.Depth.getView({})});
+
+      renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
+
+      renderTerrain(cmd_buf, terrainPipeline.getVkPipelineLayout());
+    }
+
+    {
+      etna::set_state(
+        cmd_buf,
+        gBuffer.Albedo.get(),
+        vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderStorageRead,
+        vk::ImageLayout::eGeneral,
+        vk::ImageAspectFlagBits::eColor);
+
+      etna::set_state(
+        cmd_buf,
+        gBuffer.Normal.get(),
+        vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderStorageRead,
+        vk::ImageLayout::eGeneral,
+        vk::ImageAspectFlagBits::eColor);
+
+      etna::set_state(
+        cmd_buf,
+        gBuffer.Depth.get(),
+        vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderStorageRead,
+        vk::ImageLayout::eGeneral,
+        vk::ImageAspectFlagBits::eDepth);
+
+      etna::flush_barriers(cmd_buf);
+    }
 
     {
       etna::RenderTargetState renderTargets(
@@ -754,22 +867,22 @@ void WorldRenderer::renderWorld(
         {{.image = HDRImage.get(), .view = HDRImage.getView({})}},
         {.image = mainViewDepth.get(), .view = mainViewDepth.getView({})});
 
-      renderScene(cmd_buf, staticMeshPipeline.getVkPipelineLayout());
-
-      renderTerrain(cmd_buf, terrainPipeline.getVkPipelineLayout());
+      deferredShading(cmd_buf, defferedShadingPipeline.getVkPipelineLayout());
     }
 
     postProcess(cmd_buf);
 
-    etna::set_state(
-      cmd_buf,
-      HDRImage.get(),
-      vk::PipelineStageFlagBits2::eFragmentShader,
-      vk::AccessFlagBits2::eShaderSampledRead,
-      vk::ImageLayout::eShaderReadOnlyOptimal,
-      vk::ImageAspectFlagBits::eColor);
+    {
+      etna::set_state(
+        cmd_buf,
+        HDRImage.get(),
+        vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderSampledRead,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::ImageAspectFlagBits::eColor);
 
-    etna::flush_barriers(cmd_buf);
+      etna::flush_barriers(cmd_buf);
+    }
 
     {
       etna::RenderTargetState renderTargets(

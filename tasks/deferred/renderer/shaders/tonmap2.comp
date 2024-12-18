@@ -77,50 +77,59 @@ void main() {
   }
 
   float T = P[255];
+
   if (T != 0.f)
-  {  
+  {
     for(int i = 0; i < 256; ++i)
     {
       P[i] /= T;
     }
-
-    float cutted = T;
-    float db = (maxLuminanceBuf[1] - maxLuminanceBuf[0]) / 256.;
-
-    float Ld = 0.f;
-    float Lw = 0.f;
-    float binCeil = 0.f;
-
-    while (cutted > T * tolerancePerc)
-    {
-        cutted = 0.f;
-        for(int i = 0; i < 256; ++i)
-        {
-          P[i] = f[i];
-        }
-        for(int i = 1; i < 256; ++i)
-        {
-          P[i] += P[i - 1];
-        }
-        T = P[255];
-        for(int i = 0; i < 256; ++i)
-        {
-          P[i] /= T;
-        }
-
-        for (int i = 0; i < 256; ++i)
-        {
-          Lw = pow(10.f, Bwmin + db * i);
-          Ld = pow(10.f, log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * P[i]);
-          binCeil = dL(Ld) * Lw * T * db / (dL(Lw) * Ld * (log10(Ldmax) - log10(Ldmin)));
-          if (f[i] > binCeil)
-          {
-            cutted += f[i] - binCeil;
-            f[i] = binCeil;
-          }
-        }
-    }
   }
+
+  // if (T != 0.f)
+  // {  
+  //   for(int i = 0; i < 256; ++i)
+  //   {
+  //     P[i] /= T;
+  //   }
+  // 
+  //   float cutted = T;
+  //   float db = (maxLuminanceBuf[1] - maxLuminanceBuf[0]) / 256.;
+  // 
+  //   float Ld = 0.f;
+  //   float Lw = 0.f;
+  //   float binCeil = 0.f;
+  // 
+  //   while (cutted > T * tolerancePerc)
+  //   {
+  //       cutted = 0.f;
+  //       for(int i = 0; i < 256; ++i)
+  //       {
+  //         P[i] = f[i];
+  //       }
+  //       for(int i = 1; i < 256; ++i)
+  //       {
+  //         P[i] += P[i - 1];
+  //       }
+  //       T = P[255];
+  //       for(int i = 0; i < 256; ++i)
+  //       {
+  //         P[i] /= T;
+  //       }
+  // 
+  //       for (int i = 0; i < 256; ++i)
+  //       {
+  //         Lw = pow(10.f, Bwmin + db * i);
+  //         Ld = pow(10.f, log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * P[i]);
+  //         binCeil = dL(Ld) * Lw * T * db / (dL(Lw) * Ld * (log10(Ldmax) - log10(Ldmin)));
+  //         if (f[i] > binCeil)
+  //         {
+  //           cutted += f[i] - binCeil;
+  //           f[i] = binCeil;
+  //         }
+  //       }
+  //   }
+  // }
 
   for(int i = 0; i < 256; ++i)
   {

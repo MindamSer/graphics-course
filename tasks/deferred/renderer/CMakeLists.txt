@@ -10,6 +10,8 @@ target_link_libraries(deferred_renderer
   PRIVATE glfw etna glm::glm wsi gui scene render_utils)
 
 target_add_shaders(deferred_renderer
+  shaders/deferred.frag
+  shaders/deferred.vert
   shaders/gpu_culling.comp
   shaders/HDR_to_LDR.frag
   shaders/HDR_to_LDR.vert

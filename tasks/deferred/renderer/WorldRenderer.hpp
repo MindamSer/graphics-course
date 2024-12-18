@@ -37,6 +37,8 @@ private:
     vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
   void renderTerrain(
     vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
+  void deferredShading(
+    vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout);
   void postProcess(
     vk::CommandBuffer cmd_buf);
   void copyHDRtoLDR(
@@ -75,4 +77,13 @@ private:
   etna::ComputePipeline tonmap2Pipeline;
   etna::Buffer maxLuminanceBuffer;
   etna::Buffer luminanceHistBuffer;
+
+  struct GBuffer
+  {
+    etna::Image Albedo;
+    etna::Image Normal;
+    etna::Image Depth;
+  } gBuffer;
+
+  etna::GraphicsPipeline defferedShadingPipeline{};
 };
