@@ -449,7 +449,7 @@ void SceneManager::genHieghtMap()
       }
       A /= 2.0f;
       f *= 2.0f;
-      d += 0.011f;
+      d += 0.031f;
     }
     
     for (int i = 0; i < 4096; ++i)
@@ -474,17 +474,17 @@ void SceneManager::genLightSources()
   {
     LightSource
     {
-      .pos = {-2.f, 2.f, 0.f, 1.f}, 
+      .pos = {-150.f, 150.f, 0.f, 1.f}, 
       .dir = {},
       .color = {1.f, 0.f, 0.f, 1.f},
     },
     LightSource{
-      .pos = {0.f, 2.f, 0.f, 1.f},
+      .pos = {0.f, 150.f, 0.f, 1.f},
       .dir = {},
       .color = {0.f, 1.f, 0.f, 1.f},
     },
     LightSource{
-      .pos = {2.f, 2.f, 0.f, 1.f},
+      .pos = {150.f, 150.f, 0.f, 1.f},
       .dir = {},
       .color = {0.f, 0.f, 1.f, 1.f},
     },

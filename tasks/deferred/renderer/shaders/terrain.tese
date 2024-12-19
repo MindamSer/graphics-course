@@ -69,7 +69,7 @@ void main()
 
 
   vOut.pos = pos.xyz;
-  vOut.norm = getNorm(hmCoord, hmScale).xyz;
+  vOut.norm = getNorm(hmCoord, hmScale).xzy;
   
   gl_Position = pushConstant.mProjView * pos;
 }
