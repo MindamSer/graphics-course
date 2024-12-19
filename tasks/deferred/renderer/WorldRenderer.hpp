@@ -85,8 +85,9 @@ private:
 
   struct DeferredPushConstants
   {
-    glm::mat4x4 projView;
-    glm::vec3 cameraPos;
+    glm::mat4x4 proj;
+    glm::mat4x4 view;
+    std::uint32_t lightsCount;
   } deferredPC;
 
 

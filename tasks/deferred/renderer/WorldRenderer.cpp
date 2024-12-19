@@ -495,9 +495,15 @@ void WorldRenderer::deferredShading(
   cmd_buf.bindDescriptorSets(
     vk::PipelineBindPoint::eGraphics, pipeline_layout, 0, 1, &vkSet, 0, nullptr);
 
+  deferredPC = {
+    .proj = renderConstants.proj,
+    .view = renderConstants.view,
+    .lightsCount = renderConstants.lightsCount,
+  };
+
   cmd_buf.pushConstants(
     pipeline_layout, vk::ShaderStageFlagBits::eFragment, 
-    0, sizeof(renderConstants), &renderConstants);
+    0, sizeof(DeferredPushConstants), &deferredPC);
 
   cmd_buf.draw(3, 1, 0, 0);
 }
