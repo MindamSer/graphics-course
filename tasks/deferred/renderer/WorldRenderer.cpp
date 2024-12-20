@@ -270,7 +270,7 @@ void WorldRenderer::update(const FramePacket& packet)
 void WorldRenderer::cullScene(
   vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
-  ETNA_PROFILE_GPU(cmd_buf, cullingScene);
+  ETNA_PROFILE_GPU(cmd_buf, cullScene);
   {
     vk::BufferMemoryBarrier2 barriers[] = {{}, {}, {}};
 
@@ -476,6 +476,8 @@ void WorldRenderer::renderTerrain(
 void WorldRenderer::deferredShading(
   vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
+  ETNA_PROFILE_GPU(cmd_buf, deferredShading);
+
   auto simpleGraphicsInfo = etna::get_shader_program("deferred_shader");
 
   auto set = etna::create_descriptor_set(
@@ -825,6 +827,8 @@ void WorldRenderer::postProcess(
 void WorldRenderer::copyHDRtoLDR(
   vk::CommandBuffer cmd_buf, vk::PipelineLayout pipeline_layout)
 {
+  ETNA_PROFILE_GPU(cmd_buf, copyHDRtoLDR);
+
   auto simpleGraphicsInfo = etna::get_shader_program("HDR_to_LDR_shader");
 
   auto set = etna::create_descriptor_set(

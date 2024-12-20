@@ -51,7 +51,7 @@ float dL(float La)
 }
 
 float minLum = 1.e-4f;
-float Ldmin = 1.e-4f;
+float Ldmin = 5.e-2f;
 float Ldmax = 1.f;
 
 float Lwmin = maxLuminanceBuf[0];
@@ -66,72 +66,65 @@ float P[256];
 
 
 void main() {
-  for(int i = 0; i < 256; ++i)
+  int i = 0;
+
+  for(i = 0; i < 256; ++i)
   {
     f[i] = luminanceHistBuf[i];
     P[i] = luminanceHistBuf[i];
   }
-  for(int i = 1; i < 256; ++i)
+  for(i = 1; i < 256; ++i)
   {
     P[i] += P[i - 1];
   }
 
   float T = P[255];
-
   if (T != 0.f)
-  {
-    for(int i = 0; i < 256; ++i)
+  {  
+    for(i = 0; i < 256; ++i)
     {
       P[i] /= T;
     }
+  
+    float cutted = T;
+    float db = (log10(maxLuminanceBuf[1]) - log10(maxLuminanceBuf[0])) / 256.;
+  
+    float Ld = 0.f;
+    float Lw = 0.f;
+    float binCeil = 0.f;
+  
+    while (cutted > T * tolerancePerc)
+    {
+      cutted = 0.f;
+      for(i = 0; i < 256; ++i)
+      {
+        P[i] = f[i];
+      }
+      for(i = 1; i < 256; ++i)
+      {
+        P[i] += P[i - 1];
+      }
+      T = P[255];
+      for(i = 0; i < 256; ++i)
+      {
+        P[i] /= T;
+      }
+  
+      for (i = 0; i < 256; ++i)
+      {
+        Lw = pow(10.f, Bwmin + db * i);
+        Ld = pow(10.f, log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * P[i]);
+        binCeil = ceil(dL(Ld) * Lw * T * db / (dL(Lw) * Ld * (log10(Ldmax) - log10(Ldmin))));
+        if (f[i] > binCeil)
+        {
+          cutted += f[i] - binCeil;
+          f[i] = binCeil;
+        }
+      }
+    }
   }
 
-  // if (T != 0.f)
-  // {  
-  //   for(int i = 0; i < 256; ++i)
-  //   {
-  //     P[i] /= T;
-  //   }
-  // 
-  //   float cutted = T;
-  //   float db = (maxLuminanceBuf[1] - maxLuminanceBuf[0]) / 256.;
-  // 
-  //   float Ld = 0.f;
-  //   float Lw = 0.f;
-  //   float binCeil = 0.f;
-  // 
-  //   while (cutted > T * tolerancePerc)
-  //   {
-  //       cutted = 0.f;
-  //       for(int i = 0; i < 256; ++i)
-  //       {
-  //         P[i] = f[i];
-  //       }
-  //       for(int i = 1; i < 256; ++i)
-  //       {
-  //         P[i] += P[i - 1];
-  //       }
-  //       T = P[255];
-  //       for(int i = 0; i < 256; ++i)
-  //       {
-  //         P[i] /= T;
-  //       }
-  // 
-  //       for (int i = 0; i < 256; ++i)
-  //       {
-  //         Lw = pow(10.f, Bwmin + db * i);
-  //         Ld = pow(10.f, log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * P[i]);
-  //         binCeil = dL(Ld) * Lw * T * db / (dL(Lw) * Ld * (log10(Ldmax) - log10(Ldmin)));
-  //         if (f[i] > binCeil)
-  //         {
-  //           cutted += f[i] - binCeil;
-  //           f[i] = binCeil;
-  //         }
-  //       }
-  //   }
-  // }
-
-  for(int i = 0; i < 256; ++i)
+  for(i = 0; i < 256; ++i)
   {
     luminanceHistBuf[i] = P[i];
   }

@@ -31,7 +31,7 @@ float log10(float x)
 }
 
 float minLum = 1.e-4f;
-float Ldmin = 1.e-4f;
+float Ldmin = 5.e-2f;
 float Ldmax = 1.f;
 
 float Lwmin = maxLuminanceBuf[0];
@@ -55,12 +55,10 @@ void main() {
       float Bde = log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * histValue;
       float Ld = pow(10, Bde);
 
-      out_fragColor = vec4(vec3(Ld), 1.0);
+      out_fragColor = vec4(HDRColor.rgb * (Ld / Lw), 1.0);
     }
     else
     {
-      out_fragColor = HDRColor;
+      out_fragColor = vec4(0.0f);
     }
-
-    out_fragColor = HDRColor;
 }
