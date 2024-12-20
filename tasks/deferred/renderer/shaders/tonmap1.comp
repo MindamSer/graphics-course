@@ -71,11 +71,9 @@ void main() {
   barrier();
   
   
-  if (gl_LocalInvocationID.xy == ivec2(0, 0))
+  if (gl_LocalInvocationID.y < 8)
   {
-    for(int i = 0; i < 256; ++i)
-    {
-      atomicAdd(luminanceHistBuf[i], float(localHist[i]));
-    }
+    uint i = gl_LocalInvocationID.y * 32 + gl_LocalInvocationID.x;
+    atomicAdd(luminanceHistBuf[i], float(localHist[i]));
   }
 }
