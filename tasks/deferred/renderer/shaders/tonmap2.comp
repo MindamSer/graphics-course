@@ -1,8 +1,9 @@
 #version 460
+#extension GL_EXT_shader_atomic_float : enable
 
 
 
-layout(local_size_x = 1, local_size_y = 1) in;
+layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(binding = 0) buffer MaxLuminanceBuffer
 {
@@ -50,45 +51,51 @@ float dL(float La)
     return pow(10, dLLa);
 }
 
-float minLum = 1.e-4f;
-float Ldmin = 5.e-2f;
-float Ldmax = 1.f;
 
-float Lwmin = maxLuminanceBuf[0];
-float Lwmax = maxLuminanceBuf[1];
-float Bwmin = log10(Lwmin);
-float Bwmax = log10(Lwmax);
 
-float tolerancePerc = 2.5e-2f;
-float f[256];
-float P[256];
+float Bdmin = log10(5.e-2f);
+float Bdmax = log10(1.f);
+
+float Bwmin = log10(maxLuminanceBuf[0]);
+float Bwmax = log10(maxLuminanceBuf[1]);
+
+
+const float tolerancePerc = 2.5e-2f;
+
+shared float f[256];
+shared float P[256];
+shared float T;
+shared float cutted;
+shared float db;
 
 
 
 void main() {
-  int i = 0;
+  uint i = gl_LocalInvocationID.y * 16 + gl_LocalInvocationID.x;
 
-  for(i = 0; i < 256; ++i)
+  f[i] = luminanceHistBuf[i];
+  P[i] = f[i];
+
+  memoryBarrierShared();
+  barrier();
+
+  if (i == 0)
   {
-    f[i] = luminanceHistBuf[i];
-    P[i] = luminanceHistBuf[i];
-  }
-  for(i = 1; i < 256; ++i)
-  {
-    P[i] += P[i - 1];
+    for(int k = 1; k < 256; ++k)
+    {
+      P[k] += P[k - 1];
+    }
+
+    T = P[255];
+    cutted = T;
+    db = (Bwmax - Bwmin) / 256.;
   }
 
-  float T = P[255];
+  memoryBarrierShared();
+  barrier();
+
   if (T != 0.f)
   {  
-    for(i = 0; i < 256; ++i)
-    {
-      P[i] /= T;
-    }
-  
-    float cutted = T;
-    float db = (log10(maxLuminanceBuf[1]) - log10(maxLuminanceBuf[0])) / 256.;
-  
     float Ld = 0.f;
     float Lw = 0.f;
     float binCeil = 0.f;
@@ -96,36 +103,38 @@ void main() {
     while (cutted > T * tolerancePerc)
     {
       cutted = 0.f;
-      for(i = 0; i < 256; ++i)
+      P[i] = f[i];
+  
+      memoryBarrierShared();
+      barrier();
+  
+      if (i == 0)
       {
-        P[i] = f[i];
-      }
-      for(i = 1; i < 256; ++i)
-      {
-        P[i] += P[i - 1];
-      }
-      T = P[255];
-      for(i = 0; i < 256; ++i)
-      {
-        P[i] /= T;
+        for (int k = 1; k < 256; ++k)
+        {
+          P[k] += P[k - 1];
+        }
+        T = P[255];
       }
   
-      for (i = 0; i < 256; ++i)
+      memoryBarrierShared();
+      barrier();
+  
+      P[i] /= T;
+  
+      Lw = pow(10.f, Bwmin + db * i);
+      Ld = pow(10.f, Bdmin + (Bdmax - Bdmin) * P[i]);
+      binCeil = ceil(dL(Ld) * Lw * T * db / (dL(Lw) * Ld * (Bdmax - Bdmin)));
+      if (f[i] > binCeil)
       {
-        Lw = pow(10.f, Bwmin + db * i);
-        Ld = pow(10.f, log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * P[i]);
-        binCeil = ceil(dL(Ld) * Lw * T * db / (dL(Lw) * Ld * (log10(Ldmax) - log10(Ldmin))));
-        if (f[i] > binCeil)
-        {
-          cutted += f[i] - binCeil;
-          f[i] = binCeil;
-        }
+        atomicAdd(cutted, f[i] - binCeil);
+        f[i] = binCeil;
       }
+  
+      memoryBarrierShared();
+      barrier();
     }
   }
 
-  for(i = 0; i < 256; ++i)
-  {
-    luminanceHistBuf[i] = P[i];
-  }
+  luminanceHistBuf[i] = P[i];
 }

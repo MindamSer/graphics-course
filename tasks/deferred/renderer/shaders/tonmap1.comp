@@ -46,12 +46,9 @@ void main() {
     return;
   }
 
-  if (gl_LocalInvocationID.xy == ivec2(0, 0))
+  if (gl_LocalInvocationID.y < 8)
   {
-    for(int i = 0; i < 256; ++i)
-    {
-      localHist[i] = 0;
-    }
+    localHist[gl_LocalInvocationID.y * 32 + gl_LocalInvocationID.x] = 0;
   }
   memoryBarrierShared();
   barrier();
