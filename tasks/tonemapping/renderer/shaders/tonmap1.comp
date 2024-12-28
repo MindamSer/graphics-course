@@ -1,0 +1,81 @@
+#version 460
+#extension GL_EXT_shader_atomic_float : enable
+
+
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout(push_constant) uniform params
+{
+  uvec2 res;
+} pushConstant;
+
+layout(binding = 0, r11f_g11f_b10f) uniform image2D colorTex;
+
+layout(binding = 1) buffer MaxLuminanceBuffer
+{
+  float maxLuminanceBuf[];
+};
+
+layout(binding = 2) buffer LuminanceHistBuffer
+{
+  float luminanceHistBuf[];
+};
+
+
+
+float log10(float x)
+{
+    return log(x) / log(10.f);
+}
+
+float minLum = 1.e-4f;
+float minLogLum = log10(maxLuminanceBuf[0]);
+float maxLogLum = log10(maxLuminanceBuf[1]);
+
+shared uint localHist[256];
+
+
+void main() {
+
+  ivec2 fragCoord = ivec2(gl_GlobalInvocationID.xy);
+
+
+  if (fragCoord.x >= pushConstant.res.x || fragCoord.y >= pushConstant.res.y)
+  {
+    return;
+  }
+
+  if (gl_LocalInvocationID.xy == ivec2(0, 0))
+  {
+    for(int i = 0; i < 256; ++i)
+    {
+      localHist[i] = 0;
+    }
+  }
+  memoryBarrierShared();
+  barrier();
+
+
+  vec4 fragColor = imageLoad(colorTex, fragCoord);
+  float luminance = 0.3f * fragColor.r + 0.59f * fragColor.g + 0.11f * fragColor.b;
+  if(luminance >= minLum)
+  {
+    float logLum = log10(luminance);
+    float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
+    int logLumLevel = min(int(floor(normLogLum * 256.0f)), 255);
+  
+    atomicAdd(localHist[logLumLevel], 1);
+  }
+  memoryBarrierShared();
+  barrier();
+  
+  
+  if (gl_LocalInvocationID.xy == ivec2(0, 0))
+  {
+    for(int i = 0; i < 256; ++i)
+    {
+      atomicAdd(luminanceHistBuf[i], float(localHist[i]));
+    }
+  }
+}
