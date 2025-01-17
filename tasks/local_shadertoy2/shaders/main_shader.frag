@@ -1,38 +1,39 @@
-#version 430
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
 
-layout(local_size_x = 16, local_size_y = 16) in;
+layout(location = 0) out vec4 fragColor;
 
-layout(binding = 0, rgba8) uniform image2D resultImage;
+layout(binding = 0) uniform sampler2D colorTex;
+layout(binding = 1) uniform sampler2D fileTex;
 
 layout(push_constant) uniform params
 {
-  float time;
-} pushConstant;
+  uvec2 iResolution;
+  uvec2 iMouse;
+  float iTime;
+};
 
-#define iTime pushConstant.time
 
 
 // consts
 const float PI = 3.141592;
-const vec2 iResolution = vec2(1280., 720.);
-const vec2 iMouse = vec2(0.);
 
 // render consts
 const int MAX_ITER = 200;
 const float MAX_DIST = 1e2;
-const float STEP_EPS = 1e-6;
+const float STEP_EPS = 1e-3;
 const float H = 1e-2;
 const float BLICK_POW = 5e1;
 const float SHADOW_K = 16.;
 const float CORE_SMOOTH = 0.05;
 
 // scene consts
-float NUCLEON_SIZE = 0.3;
-float NUCLEON_OFFSET = 0.4;
-float CORE_OMEGA = 1.;
-float ELECTRON_SIZE = 0.1;
-float ELECTRON_OFFSET = 2.;
-float ELECTRON_OMEGA = 0.5;
+const float NUCLEON_SIZE = 0.3;
+const float NUCLEON_OFFSET = 0.4;
+const float CORE_OMEGA = 0.;
+const float ELECTRON_SIZE = 0.2;
+const float ELECTRON_OFFSET = 2.;
+const float ELECTRON_OMEGA = 0.5;
 
 
 
@@ -159,6 +160,7 @@ vec3 getNormal(vec3 p)
 
 vec3 trace(in vec3 start, in vec3 dir, out bool hit)
 {
+	hit = false;
     vec3 p = vec3(0.);
     float t = 0.;
     float d = 0.;
@@ -208,10 +210,12 @@ light(vec3(2., 3., -3.), vec4(1., 0., 1., 1.)),
 light(vec3(0., -4., -3.), vec4(0., 1., 1., 1.))
 );
 
-void mainImage( out vec4 fragColor, in vec2 fragCoord )
+
+
+void main()
 {
     // angle of camera
-    vec2 mouseTheta = PI * (iMouse.xy * 2. - iResolution.xy) / iResolution.x;
+    vec2 mouseTheta = PI * (vec2(iMouse).xy * 2. - vec2(iResolution).xy) / iResolution.x;
     float phi = mouseTheta.x;
     float theta = mouseTheta.y;
     
@@ -226,77 +230,43 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     float cameraDepth = 1. / tan(radians(mainCam.fov / 2.));
     
     // computing ray direction
-    vec2 uv = (fragCoord * 2. - iResolution.xy) / iResolution.x;
+    vec2 uv = (vec2(gl_FragCoord).xy * 2. - vec2(iResolution).xy) / iResolution.x;
     vec3 rayDir = normalize(frameCameraDir * cameraDepth + frameCameraRight * uv.x + frameCameraUp * uv.y);
     
+	// vec4 color = textureLod(colorTex, vec2(0.5) + 4.0 * uv, 0).rgba;
+	vec4 color = vec4(vec3(0.), 1.);
+	
     //tracing ray
     bool hit = false;
     vec3 p = trace(frameCameraPos, rayDir, hit);
-    
-    vec4 color = vec4(vec3(0.), 1.);
-    
+	
     // process hit case
     if (hit)
     {
+        color = vec4(vec3(0.), 1.);
         vec3 n = getNormal(p);
+        vec3 w = abs(n);
+        
+        vec3 texel1 =
+            w.x * textureLod(colorTex, vec2(0.5) + 1.5 * p.yz, 0).rgb +
+            w.y * textureLod(colorTex, vec2(0.5) + 1.5 * p.xz, 0).rgb +
+            w.z * textureLod(colorTex, vec2(0.5) + 1.5 * p.xy, 0).rgb;
+		vec3 texel2 =
+            w.x * textureLod(fileTex, vec2(0.5) + 0.35 * p.yz, 0).rgb +
+            w.y * textureLod(fileTex, vec2(0.5) + 0.35 * p.xz, 0).rgb +
+            w.z * textureLod(fileTex, vec2(0.5) + 0.35 * p.xy, 0).rgb;
+        
         vec3 hc = normalize(frameCameraPos - p);
         for (int i = 0; i < lightCount; i++)
         {
             vec3 hl = normalize(ligths[i].pos - p);
             float brightness = softshadow(p, hl, SHADOW_K) * max(0., dot(n, hl));
             float blick = pow(brightness, BLICK_POW);
-            color = color + (0.05 + 0.475 * brightness + 0.475 * blick) * ligths[i].col;
+            color = color + (0.1 + 0.45 * brightness + 0.45 * blick) * ligths[i].col;
         }
+        
+        color =  color * vec4(texel1, 1.0) * vec4(texel2, 1.0);
     }
 
     fragColor = color;
-}
-
-
-void main()
-{
-  // angle of camera
-  vec2 mouseTheta = PI * (iMouse.xy * 2. - iResolution.xy) / iResolution.x;
-  float phi = mouseTheta.x;
-  float theta = mouseTheta.y;
-  
-  // moving camera
-  vec3 frameCameraPos = rotateY(phi) * mainCam.pos;
-  vec3 frameCameraDir = rotateY(phi) * mainCam.dir;
-  vec3 frameCameraUp = mainCam.up;
-  vec3 frameCameraRight = cross(frameCameraDir, frameCameraUp);
-  frameCameraPos = rotateAxis(frameCameraRight, -theta) * frameCameraPos;
-  frameCameraDir = rotateAxis(frameCameraRight, -theta) * frameCameraDir;
-  frameCameraUp = rotateAxis(frameCameraRight, -theta) * frameCameraUp;
-  float cameraDepth = 1. / tan(radians(mainCam.fov / 2.));
-
-  
-  ivec2 fragCoord = ivec2(gl_GlobalInvocationID.xy);
-  vec2 uv = (fragCoord * 2. - iResolution.xy) / iResolution.x;
-  vec3 rayDir = normalize(frameCameraDir * cameraDepth + frameCameraRight * uv.x + frameCameraUp * uv.y);
-    
-  //tracing ray
-  bool hit = false;
-  vec3 p = trace(frameCameraPos, rayDir, hit);
-  
-  vec4 color = vec4(vec3(0.), 1.);
-  
-  // process hit case
-  if (hit)
-  {
-      vec3 n = getNormal(p);
-      vec3 hc = normalize(frameCameraPos - p);
-      for (int i = 0; i < lightCount; i++)
-      {
-          vec3 hl = normalize(ligths[i].pos - p);
-          float brightness = softshadow(p, hl, SHADOW_K) * max(0., dot(n, hl));
-          float blick = pow(brightness, BLICK_POW);
-          color = color + (0.05 + 0.475 * brightness + 0.475 * blick) * ligths[i].col;
-      }
-  }
-  
-  
-
-  if (fragCoord.x < 1280 && fragCoord.y < 720)
-    imageStore(resultImage, fragCoord, color);
 }
