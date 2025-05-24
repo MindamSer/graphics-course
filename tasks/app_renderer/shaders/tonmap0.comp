@@ -1,0 +1,64 @@
+#version 460
+
+
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout(push_constant) uniform params
+{
+  uvec2 res;
+} pushConstant;
+
+layout(binding = 0, r11f_g11f_b10f) uniform image2D colorTex;
+
+layout(binding = 1) buffer MaxLuminanceBuffer
+{
+  uint maxLuminanceBuf[];
+};
+
+
+
+float minLum = 1.e-4f;
+shared uint localMinLum;
+shared uint localMaxLum;
+
+
+
+void main() {
+
+  ivec2 fragCoord = ivec2(gl_GlobalInvocationID.xy);
+
+
+  if (fragCoord.x >= pushConstant.res.x || fragCoord.y >= pushConstant.res.y)
+  {
+    return;
+  }
+
+  if (gl_LocalInvocationID.xy == ivec2(0, 0))
+  {
+    localMinLum = 0x7FFFFFFF;
+    localMaxLum = 0;
+  }
+  memoryBarrierShared();
+  barrier();
+
+
+  vec4 fragColor = imageLoad(colorTex, fragCoord);
+  float luminance = 0.3f * fragColor.r + 0.59f * fragColor.g + 0.11f * fragColor.b;
+  if (luminance >= minLum)
+  {
+    uint bitFloat = floatBitsToInt(luminance);
+
+    atomicMin(localMinLum, bitFloat);
+    atomicMax(localMaxLum, bitFloat);
+  }
+  memoryBarrierShared();
+  barrier();
+
+
+  if (gl_LocalInvocationID.xy == ivec2(0, 0))
+  {
+    atomicMin(maxLuminanceBuf[0], localMinLum);
+    atomicMax(maxLuminanceBuf[1], localMaxLum);
+  }
+}

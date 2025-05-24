@@ -5,6 +5,8 @@
 #include <glm/glm.hpp>
 #include <tiny_gltf.h>
 #include <etna/Buffer.hpp>
+#include <etna/Image.hpp>
+#include <etna/Sampler.hpp>
 #include <etna/BlockingTransferHelper.hpp>
 #include <etna/VertexInput.hpp>
 
@@ -29,6 +31,19 @@ struct Mesh
   std::uint32_t relemCount;
 };
 
+struct RenderElementBoundingBox
+{
+  glm::vec3 max_pos;
+  glm::vec3 min_pos;
+};
+
+struct LightSource
+{
+  glm::vec4 pos;
+  glm::vec4 dir;
+  glm::vec4 color;
+};
+
 class SceneManager
 {
 public:
@@ -49,6 +64,21 @@ public:
 
   vk::Buffer getVertexBuffer() { return unifiedVbuf.get(); }
   vk::Buffer getIndexBuffer() { return unifiedIbuf.get(); }
+
+  etna::Buffer* getRelemBuffer() { return &unifiedRelemBuf; }
+  etna::Buffer* getRelemBoxBuffer() { return &unifiedRelemBoxBuf; }
+  etna::Buffer* getMeshBuffer() { return &unifiedMeshBuf; }
+  etna::Buffer* getMatricesBuffer() { return &unifiedInstMatricesBuf; }
+  etna::Buffer* getIMeshesBuffer() { return &unifiedInstMeshesBuf; }
+  etna::Buffer* getDrawCmdBuffer() { return &unifiedDrawCmdBuf; }
+  etna::Buffer* getDrawMatricesIndBuffer() { return &unifiedDrawMatricesIndBuf; }
+  etna::Buffer* getMatricesOffsetsIndBuffer() { return &unifiedMatricesOffsetsIndBuf; }
+
+  etna::Image* getHieghtMapImage() { return &hieghtMap; }
+  etna::Sampler* getHieghtMapSampler() { return &hieghtMapSampler; };
+
+  etna::Buffer* getLightSourcesBuffer() { return &unifiedLightSourcesBuf; }
+  std::span<const LightSource> getLightSources() { return lights; }
 
   etna::VertexByteStreamFormatDescription getVertexFormatDescription();
 
@@ -79,8 +109,10 @@ private:
     std::vector<std::uint32_t> indices;
     std::vector<RenderElement> relems;
     std::vector<Mesh> meshes;
+    std::vector<RenderElementBoundingBox> relemBoxes;
   };
   ProcessedMeshes processMeshes(const tinygltf::Model& model) const;
+  ProcessedMeshes processBakedMeshes(const tinygltf::Model& model) const;
   void uploadData(std::span<const Vertex> vertices, std::span<const std::uint32_t>);
 
 private:
@@ -89,10 +121,32 @@ private:
   etna::BlockingTransferHelper transferHelper;
 
   std::vector<RenderElement> renderElements;
+  std::vector<RenderElementBoundingBox> relemBoxes;
   std::vector<Mesh> meshes;
   std::vector<glm::mat4x4> instanceMatrices;
   std::vector<std::uint32_t> instanceMeshes;
 
+  std::vector<VkDrawIndexedIndirectCommand> drawCmds;
+  std::vector<std::uint32_t> matricesOffsetsInd;
+
   etna::Buffer unifiedVbuf;
   etna::Buffer unifiedIbuf;
+
+  etna::Buffer unifiedRelemBuf;
+  etna::Buffer unifiedRelemBoxBuf;
+  etna::Buffer unifiedMeshBuf;
+  etna::Buffer unifiedInstMatricesBuf;
+  etna::Buffer unifiedInstMeshesBuf;
+
+  etna::Buffer unifiedDrawCmdBuf;
+  etna::Buffer unifiedDrawMatricesIndBuf;
+  etna::Buffer unifiedMatricesOffsetsIndBuf;
+
+  etna::Image hieghtMap;
+  etna::Sampler hieghtMapSampler;
+  void genHieghtMap();
+
+  std::vector<LightSource> lights;
+  etna::Buffer unifiedLightSourcesBuf;
+  void genLightSources();
 };
