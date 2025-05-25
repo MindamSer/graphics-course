@@ -9,6 +9,7 @@ App::App()
   mainWindow = windowing.createWindow(OsWindow::CreateInfo{
     .resolution = initialRes,
   });
+  mainCam.lookAt({0, 10, 10}, {0, 0, 0}, {0, 1, 0});
 
   renderer.reset(new Renderer(initialRes));
 
@@ -16,10 +17,7 @@ App::App()
   renderer->initVulkan(instExts);
 
   auto surface = mainWindow->createVkSurface(etna::get_context().getInstance());
-
   renderer->initFrameDelivery(std::move(surface), [this]() { return mainWindow->getResolution(); });
-
-  mainCam.lookAt({0, 10, 10}, {0, 0, 0}, {0, 1, 0});
 
   renderer->loadScene(GRAPHICS_COURSE_RESOURCES_ROOT "/scenes/Avocado/Avocado_baked.gltf");
 }

@@ -390,21 +390,21 @@ SceneManager::ProcessedMeshes SceneManager::processBakedMeshes(const tinygltf::M
 
     for (const auto& prim : mesh.primitives)
     {
-      auto& indicies_accessor = model.accessors[prim.indices];
-      auto& position_accessor = model.accessors[prim.attributes.at("POSITION")];
+      auto& indiciesAccessor = model.accessors[prim.indices];
+      auto& positionAccessor = model.accessors[prim.attributes.at("POSITION")];
 
       result.relems.push_back(RenderElement{
-        static_cast<std::uint32_t>(position_accessor.byteOffset / sizeof(Vertex)),
-        static_cast<std::uint32_t>(indicies_accessor.byteOffset / sizeof(std::uint32_t)),
-        static_cast<std::uint32_t>(indicies_accessor.count)});
+        static_cast<std::uint32_t>(positionAccessor.byteOffset / sizeof(Vertex)),
+        static_cast<std::uint32_t>(indiciesAccessor.byteOffset / sizeof(std::uint32_t)),
+        static_cast<std::uint32_t>(indiciesAccessor.count)});
 
       result.relemBoxes.push_back(RenderElementBoundingBox{
-        {position_accessor.maxValues[0],
-         position_accessor.maxValues[1],
-         position_accessor.maxValues[2]},
-        {position_accessor.minValues[0],
-         position_accessor.minValues[1],
-         position_accessor.minValues[2]}});
+        {positionAccessor.maxValues[0],
+         positionAccessor.maxValues[1],
+         positionAccessor.maxValues[2]},
+        {positionAccessor.minValues[0],
+         positionAccessor.minValues[1],
+         positionAccessor.minValues[2]}});
     }
   }
 
@@ -433,25 +433,25 @@ void SceneManager::genHieghtMap()
   }
 
   {
-    int octave_num = 1;
-    
-    float A = 1.0f;
+    int octaveNum = 1;
+
+    float a = 1.0f;
     float f = 1.0f / 4096.0f;
     float d = 0.0f;
-    for (int k = 0; k < octave_num; ++k)
+    for (int k = 0; k < octaveNum; ++k)
     {
       for (int i = 0; i < 4096; ++i)
       {
         for (int j = 0; j < 4096; ++j)
         {
-          hieghtMapData[i * 4096 + j] += A * perlin(j * f + d, i * f + d);
+          hieghtMapData[i * 4096 + j] += a * perlin(j * f + d, i * f + d);
         }
       }
-      A /= 2.0f;
+      a /= 2.0f;
       f *= 2.0f;
       d += 0.031f;
     }
-    
+
     for (int i = 0; i < 4096; ++i)
     {
       for (int j = 0; j < 4096; ++j)
@@ -470,11 +470,11 @@ void SceneManager::genHieghtMap()
 
 void SceneManager::genLightSources()
 {
-  lights = 
+  lights =
   {
     LightSource
     {
-      .pos = {-150.f, 150.f, 0.f, 1.f}, 
+      .pos = {-150.f, 150.f, 0.f, 1.f},
       .dir = {},
       .color = {1.f, 0.f, 0.f, 1.f},
     },

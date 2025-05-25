@@ -25,11 +25,11 @@ void Renderer::initVulkan(std::span<const char*> instance_extensions)
   deviceExtensions.push_back(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME);
 
   etna::initialize(etna::InitParams{
-    .applicationName = "model_bakery_renderer",
+    .applicationName = "app_renderer",
     .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
     .instanceExtensions = instanceExtensions,
     .deviceExtensions = deviceExtensions,
-    .features = vk::PhysicalDeviceFeatures2{.features = {.tessellationShader = true}},
+    .features = vk::PhysicalDeviceFeatures2{.features = {.tessellationShader = 1}},
     .physicalDeviceIndexOverride = {},
     .numFramesInFlight = 2,
   });
@@ -73,7 +73,7 @@ void Renderer::debugInput(const Keyboard& kb)
   if (kb[KeyboardKey::kB] == ButtonState::Falling)
   {
     const int retval = std::system("cd " GRAPHICS_COURSE_ROOT "/build"
-                                   " && cmake --build . --target model_bakery_renderer_shaders");
+                                   " && cmake --build . --target app_renderer_shaders");
     if (retval != 0)
       spdlog::warn("Shader recompilation returned a non-zero return code!");
     else
