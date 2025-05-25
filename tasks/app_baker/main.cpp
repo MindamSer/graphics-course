@@ -3,6 +3,8 @@
 #include <spdlog/spdlog.h>
 #include "tiny_gltf.h"
 
+using Path = std::filesystem::path;
+
 
 struct RenderElement
 {
@@ -53,21 +55,21 @@ std::uint32_t encode_normal(glm::vec3 normal)
 
 
 
-std::optional<tinygltf::Model> loadModel(std::filesystem::path path)
+std::optional<tinygltf::Model> load_model(Path model_path)
 {
   tinygltf::TinyGLTF loader;
   loader.SetImagesAsIs(true);
-  tinygltf::Model model;
 
+  bool success = false;
+  tinygltf::Model model;
   std::string error;
   std::string warning;
-  bool success = false;
 
-  auto ext = path.extension();
+  std::string ext = model_path.extension().string();
   if (ext == ".gltf")
-    success = loader.LoadASCIIFromFile(&model, &error, &warning, path.string());
+    success = loader.LoadASCIIFromFile(&model, &error, &warning, model_path.string());
   else if (ext == ".glb")
-    success = loader.LoadBinaryFromFile(&model, &error, &warning, path.string());
+    success = loader.LoadBinaryFromFile(&model, &error, &warning, model_path.string());
   else
   {
     spdlog::error("glTF: Unknown glTF file extension. Expected .gltf or .glb.");
@@ -92,24 +94,23 @@ std::optional<tinygltf::Model> loadModel(std::filesystem::path path)
   return model;
 }
 
-int saveModel(tinygltf::Model& model, std::filesystem::path& path) 
+int save_model(tinygltf::Model& model, Path& path)
 {
   tinygltf::TinyGLTF saver;
   saver.SetImagesAsIs(true);
-  bool success = false;
 
-  success = saver.WriteGltfSceneToFile(&model, path.string(), 0, 0, 1, 0);
-  if (!success)
+  if (!saver.WriteGltfSceneToFile(&model, path.string(), false, false, true, false))
   {
     spdlog::error("glTF: Failed to save model!");
     return 1;
   }
+
   return 0;
 }
 
 
 
-ProcessedMeshes processMeshes(const tinygltf::Model& model)
+ProcessedMeshes process_meshes(const tinygltf::Model& model)
 {
   // NOTE: glTF assets can have pretty wonky data layouts which are not appropriate
   // for real-time rendering, so we have to press the data first. In serious engines
@@ -315,30 +316,34 @@ ProcessedMeshes processMeshes(const tinygltf::Model& model)
 
 
 
-int bake_model(std::filesystem::path modelPath)
+int bake_model(Path model_path)
 {
-  std::filesystem::path bakedModelPath;
-  std::filesystem::path bakedBinPath;
+  Path bakedModelPath;
+  Path bakedBinPath;
   {
-    std::filesystem::path modelDir = modelPath.parent_path();
-    std::filesystem::path modelName = modelPath.stem();
+    Path modelDir = model_path.parent_path();
+    Path modelName = model_path.stem();
     bakedModelPath = modelDir / modelName += "_baked.gltf";
     bakedBinPath = modelDir / modelName += "_baked.bin";
   }
 
 
-
-  spdlog::info("Loading model...");
-  auto maybeModel = loadModel(modelPath);
-  if (!maybeModel.has_value())
-    return 1;
-  tinygltf::Model model = std::move(*maybeModel);
-  spdlog::info("Model loaded.");
+  tinygltf::Model model;
+  {
+    spdlog::info("Loading model...");
+    auto maybeModel = load_model(model_path);
+    if (!maybeModel.has_value())
+      return 1;
+    model = std::move(*maybeModel);
+    spdlog::info("Model loaded.");
+  }
+  model.extensionsRequired.push_back("KHR_mesh_quantization");
+  model.extensionsUsed.push_back("KHR_mesh_quantization");
 
 
 
   spdlog::info("Processing meshes...");
-  auto [vertices, indices, relems, meshes] = processMeshes(model);
+  auto [vertices, indices, relems, meshes] = process_meshes(model);
 
   std::size_t indiciesOffset = 0;
   std::size_t indiciesSize = indices.size() * sizeof(uint32_t);
@@ -346,23 +351,20 @@ int bake_model(std::filesystem::path modelPath)
   std::size_t verticesSize = vertices.size() * sizeof(Vertex);
   spdlog::info("Meshes processed.");
 
-  model.extensionsRequired.push_back("KHR_mesh_quantization");
-  model.extensionsUsed.push_back("KHR_mesh_quantization");
-
 
 
   spdlog::info("Building buffers...");
   {
-    tinygltf::Buffer baked_buffer;
-    baked_buffer.name = bakedBinPath.stem().string();
-    baked_buffer.uri = bakedBinPath.filename().string();
-    baked_buffer.data.resize(verticesOffset + verticesSize);
+    tinygltf::Buffer bakedBuffer;
+    bakedBuffer.name = bakedBinPath.stem().string();
+    bakedBuffer.uri = bakedBinPath.filename().string();
+    bakedBuffer.data.resize(verticesOffset + verticesSize);
 
-    std::memcpy(baked_buffer.data.data() + indiciesOffset, indices.data(), indiciesSize);
-    std::memcpy(baked_buffer.data.data() + verticesOffset, vertices.data(), verticesSize);
+    std::memcpy(bakedBuffer.data.data() + indiciesOffset, indices.data(), indiciesSize);
+    std::memcpy(bakedBuffer.data.data() + verticesOffset, vertices.data(), verticesSize);
 
     model.buffers.clear();
-    model.buffers.push_back(baked_buffer);
+    model.buffers.push_back(bakedBuffer);
   }
   spdlog::info("Buffers built.");
 
@@ -370,47 +372,47 @@ int bake_model(std::filesystem::path modelPath)
 
   spdlog::info("Building buffer views...");
   {
-    tinygltf::BufferView baked_bufferViews[2]{};
+    tinygltf::BufferView bakedBufferViews[2]{};
 
-    baked_bufferViews[0].name = "baked_indicies";
-    baked_bufferViews[0].buffer = 0;
-    baked_bufferViews[0].byteOffset = indiciesOffset;
-    baked_bufferViews[0].byteLength = indiciesSize;
-    baked_bufferViews[0].byteStride = 0;
-    baked_bufferViews[0].target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
+    bakedBufferViews[0].name = "baked_indicies";
+    bakedBufferViews[0].buffer = 0;
+    bakedBufferViews[0].byteOffset = indiciesOffset;
+    bakedBufferViews[0].byteLength = indiciesSize;
+    bakedBufferViews[0].byteStride = 0;
+    bakedBufferViews[0].target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
 
-    baked_bufferViews[1].name = "baked_vertices";
-    baked_bufferViews[1].buffer = 0;
-    baked_bufferViews[1].byteOffset = verticesOffset;
-    baked_bufferViews[1].byteLength = verticesSize;
-    baked_bufferViews[1].byteStride = sizeof(Vertex);
-    baked_bufferViews[1].target = TINYGLTF_TARGET_ARRAY_BUFFER;
+    bakedBufferViews[1].name = "baked_vertices";
+    bakedBufferViews[1].buffer = 0;
+    bakedBufferViews[1].byteOffset = verticesOffset;
+    bakedBufferViews[1].byteLength = verticesSize;
+    bakedBufferViews[1].byteStride = sizeof(Vertex);
+    bakedBufferViews[1].target = TINYGLTF_TARGET_ARRAY_BUFFER;
 
     model.bufferViews.clear();
-    model.bufferViews.push_back(baked_bufferViews[0]);
-    model.bufferViews.push_back(baked_bufferViews[1]);
+    model.bufferViews.push_back(bakedBufferViews[0]);
+    model.bufferViews.push_back(bakedBufferViews[1]);
   }
   spdlog::info("Buffer views built.");
 
 
 
   spdlog::info("Building accessors...");
-  std::vector<tinygltf::Accessor> new_accessors;
+  std::vector<tinygltf::Accessor> newAccessors;
   for (std::uint32_t i = 0; i < model.meshes.size(); ++i)
   {
-      auto& cur_mesh = model.meshes[i];
+      auto& curMesh = model.meshes[i];
 
-      for (std::uint32_t j = 0; j < cur_mesh.primitives.size(); ++j)
+      for (std::uint32_t j = 0; j < curMesh.primitives.size(); ++j)
       {
-        auto& cur_prim = cur_mesh.primitives[j];
+        auto& curPrim = curMesh.primitives[j];
 
-        const auto normalIt = cur_prim.attributes.find("NORMAL");
-        const auto texcoordIt = cur_prim.attributes.find("TEXCOORD_0");
-        const auto tangentIt = cur_prim.attributes.find("TANGENT");
+        const auto normalIt = curPrim.attributes.find("NORMAL");
+        const auto texcoordIt = curPrim.attributes.find("TEXCOORD_0");
+        const auto tangentIt = curPrim.attributes.find("TANGENT");
 
-        const bool hasNormals = normalIt != cur_prim.attributes.end();
-        const bool hasTexcoord = texcoordIt != cur_prim.attributes.end();
-        const bool hasTangents = tangentIt != cur_prim.attributes.end();
+        const bool hasNormals = normalIt != curPrim.attributes.end();
+        const bool hasTexcoord = texcoordIt != curPrim.attributes.end();
+        const bool hasTangents = tangentIt != curPrim.attributes.end();
 
         std::uint32_t& indexOffset = relems[meshes[i].firstRelem + j].indexOffset;
         std::uint32_t& indexCount = relems[meshes[i].firstRelem + j].indexCount;
@@ -428,83 +430,83 @@ int bake_model(std::filesystem::path modelPath)
           minValues = glm::min(minValues, glm::vec3(vertices[vertexOffset + curIndex].positionAndNormal));
         }
 
-        tinygltf::Accessor baked_accessors[5]{};
+        tinygltf::Accessor bakedAccessors[5]{};
 
-        baked_accessors[0].name = "baked_indicies_accessor";
-        baked_accessors[0].bufferView = 0;
-        baked_accessors[0].byteOffset = indexOffset * sizeof(uint32_t);
-        baked_accessors[0].count = indexCount;
-        baked_accessors[0].normalized = false;
-        baked_accessors[0].type = TINYGLTF_TYPE_SCALAR;
-        baked_accessors[0].componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+        bakedAccessors[0].name = "baked_indicies_accessor";
+        bakedAccessors[0].bufferView = 0;
+        bakedAccessors[0].byteOffset = indexOffset * sizeof(uint32_t);
+        bakedAccessors[0].count = indexCount;
+        bakedAccessors[0].normalized = false;
+        bakedAccessors[0].type = TINYGLTF_TYPE_SCALAR;
+        bakedAccessors[0].componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
 
-        baked_accessors[1].name = "baked_position_accessor";
-        baked_accessors[1].bufferView = 1;
-        baked_accessors[1].byteOffset = vertexOffset * sizeof(Vertex);
-        baked_accessors[1].count = maxIndex + 1;
-        baked_accessors[1].normalized = false;
-        baked_accessors[1].type = TINYGLTF_TYPE_VEC3;
-        baked_accessors[1].componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-        baked_accessors[1].maxValues = {maxValues.x, maxValues.y, maxValues.z};
-        baked_accessors[1].minValues = {minValues.x, minValues.y, minValues.z};
+        bakedAccessors[1].name = "baked_position_accessor";
+        bakedAccessors[1].bufferView = 1;
+        bakedAccessors[1].byteOffset = vertexOffset * sizeof(Vertex);
+        bakedAccessors[1].count = maxIndex + 1;
+        bakedAccessors[1].normalized = false;
+        bakedAccessors[1].type = TINYGLTF_TYPE_VEC3;
+        bakedAccessors[1].componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        bakedAccessors[1].maxValues = {maxValues.x, maxValues.y, maxValues.z};
+        bakedAccessors[1].minValues = {minValues.x, minValues.y, minValues.z};
 
-        baked_accessors[2].name = "baked_normal_accessor";
-        baked_accessors[2].bufferView = 1;
-        baked_accessors[2].byteOffset = vertexOffset * sizeof(Vertex) + 3 * sizeof(float);
-        baked_accessors[2].count = maxIndex + 1;
-        baked_accessors[2].normalized = true;
-        baked_accessors[2].type = TINYGLTF_TYPE_VEC3;
-        baked_accessors[2].componentType = TINYGLTF_COMPONENT_TYPE_BYTE;
+        bakedAccessors[2].name = "baked_normal_accessor";
+        bakedAccessors[2].bufferView = 1;
+        bakedAccessors[2].byteOffset = vertexOffset * sizeof(Vertex) + 3 * sizeof(float);
+        bakedAccessors[2].count = maxIndex + 1;
+        bakedAccessors[2].normalized = true;
+        bakedAccessors[2].type = TINYGLTF_TYPE_VEC3;
+        bakedAccessors[2].componentType = TINYGLTF_COMPONENT_TYPE_BYTE;
 
-        baked_accessors[3].name = "baked_texCoord_accessor";
-        baked_accessors[3].bufferView = 1;
-        baked_accessors[3].byteOffset = vertexOffset * sizeof(Vertex) + 4 * sizeof(float);
-        baked_accessors[3].count = maxIndex + 1;
-        baked_accessors[3].normalized = false;
-        baked_accessors[3].type = TINYGLTF_TYPE_VEC2;
-        baked_accessors[3].componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+        bakedAccessors[3].name = "baked_texCoord_accessor";
+        bakedAccessors[3].bufferView = 1;
+        bakedAccessors[3].byteOffset = vertexOffset * sizeof(Vertex) + 4 * sizeof(float);
+        bakedAccessors[3].count = maxIndex + 1;
+        bakedAccessors[3].normalized = false;
+        bakedAccessors[3].type = TINYGLTF_TYPE_VEC2;
+        bakedAccessors[3].componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
 
-        baked_accessors[4].name = "baked_tangent_accessor";
-        baked_accessors[4].bufferView = 1;
-        baked_accessors[4].byteOffset = vertexOffset * sizeof(Vertex) + 6 * sizeof(float);
-        baked_accessors[4].count = maxIndex + 1;
-        baked_accessors[4].normalized = true;
-        baked_accessors[4].type = TINYGLTF_TYPE_VEC4;
-        baked_accessors[4].componentType = TINYGLTF_COMPONENT_TYPE_BYTE;
+        bakedAccessors[4].name = "baked_tangent_accessor";
+        bakedAccessors[4].bufferView = 1;
+        bakedAccessors[4].byteOffset = vertexOffset * sizeof(Vertex) + 6 * sizeof(float);
+        bakedAccessors[4].count = maxIndex + 1;
+        bakedAccessors[4].normalized = true;
+        bakedAccessors[4].type = TINYGLTF_TYPE_VEC4;
+        bakedAccessors[4].componentType = TINYGLTF_COMPONENT_TYPE_BYTE;
 
 
-        cur_prim.indices = static_cast<int>(new_accessors.size());
-        new_accessors.push_back(baked_accessors[0]);
+        curPrim.indices = static_cast<int>(newAccessors.size());
+        newAccessors.push_back(bakedAccessors[0]);
 
-        cur_prim.attributes.clear();
+        curPrim.attributes.clear();
 
-        cur_prim.attributes.insert({"POSITION", static_cast<int>(new_accessors.size())});
-        new_accessors.push_back(baked_accessors[1]);
+        curPrim.attributes.insert({"POSITION", static_cast<int>(newAccessors.size())});
+        newAccessors.push_back(bakedAccessors[1]);
 
         if (hasNormals)
         {
-          cur_prim.attributes.insert({"NORMAL", static_cast<int>(new_accessors.size())});
-          new_accessors.push_back(baked_accessors[2]);
+          curPrim.attributes.insert({"NORMAL", static_cast<int>(newAccessors.size())});
+          newAccessors.push_back(bakedAccessors[2]);
         }
         if (hasTexcoord)
         {
-          cur_prim.attributes.insert({"TEXCOORD_0", static_cast<int>(new_accessors.size())});
-          new_accessors.push_back(baked_accessors[3]);
+          curPrim.attributes.insert({"TEXCOORD_0", static_cast<int>(newAccessors.size())});
+          newAccessors.push_back(bakedAccessors[3]);
         }
         if (hasTangents)
         {
-          cur_prim.attributes.insert({"TANGENT", static_cast<int>(new_accessors.size())});
-          new_accessors.push_back(baked_accessors[4]);
+          curPrim.attributes.insert({"TANGENT", static_cast<int>(newAccessors.size())});
+          newAccessors.push_back(bakedAccessors[4]);
         }
       }
   }
-  model.accessors = std::move(new_accessors);
+  model.accessors = std::move(newAccessors);
   spdlog::info("Accessors built.");
 
 
 
   spdlog::info("Saving model...");
-  saveModel(model, bakedModelPath);
+  save_model(model, bakedModelPath);
   spdlog::info("Model saved.");
 
 
@@ -518,18 +520,14 @@ int bake_model(std::filesystem::path modelPath)
 
 int main(int argc, char* argv[])
 {
+  if (argc != 2)
   {
-    std::filesystem::path programPath = argv[0];
-    if (argc != 2)
-    {
-      spdlog::error(
-        "Wrong number of arguments. Expected 1, got %d.\nUsage: %s <file_path>\n",
-        argc - 1,
-        programPath.filename().string().c_str());
-      return 1;
-    }
+    spdlog::error(
+      "Wrong number of arguments. Expected 1, got {}. Usage: {} <file_path>\n",
+      argc - 1, Path(argv[0]).filename().string().c_str());
+    return 1;
   }
 
-  spdlog::info("Args good, start baking...");
+  spdlog::info("argc good, baking...");
   return bake_model(argv[1]);
 }
