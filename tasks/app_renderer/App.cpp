@@ -19,7 +19,7 @@ App::App()
   auto surface = mainWindow->createVkSurface(etna::get_context().getInstance());
   renderer->initFrameDelivery(std::move(surface), [this]() { return mainWindow->getResolution(); });
 
-  renderer->loadScene(GRAPHICS_COURSE_RESOURCES_ROOT "/scenes/avocado/Avocado.gltf");
+  renderer->loadScene(GRAPHICS_COURSE_RESOURCES_ROOT "/scenes/avocado/Avocado_baked.gltf");
 }
 
 void App::run()
