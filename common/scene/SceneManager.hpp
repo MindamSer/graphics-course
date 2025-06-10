@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 
 #include <glm/glm.hpp>
@@ -11,6 +12,14 @@
 #include <etna/VertexInput.hpp>
 
 
+struct Material
+{
+  uint32_t albedoTexIndex;
+  uint32_t metRouTexIndex;
+  uint32_t normalTexIndex;
+};
+
+
 // A single render element (relem) corresponds to a single draw call
 // of a certain pipeline with specific bindings (including material data)
 struct RenderElement
@@ -18,8 +27,7 @@ struct RenderElement
   std::uint32_t vertexOffset;
   std::uint32_t indexOffset;
   std::uint32_t indexCount;
-  // Not implemented!
-  // Material* material;
+  std::uint32_t materialIndex;
 };
 
 struct RenderElementBoundingBox
@@ -99,6 +107,8 @@ public:
 private:
   std::optional<tinygltf::Model> loadModel(std::filesystem::path path);
 
+  void loadMaterials(const tinygltf::Model& model);
+
   struct ProcessedInstances
   {
     std::vector<glm::mat4x4> matrices;
@@ -119,14 +129,14 @@ private:
   {
     std::vector<Vertex> vertices;
     std::vector<std::uint32_t> indices;
-    std::vector<RenderElement> relems;
     std::vector<Mesh> meshes;
+    std::vector<RenderElement> relems;
     std::vector<RenderElementBoundingBox> relemBoxes;
   };
   ProcessedMeshes processMeshes(const tinygltf::Model& model) const;
   ProcessedMeshes processBakedMeshes(const tinygltf::Model& model) const;
 
-  void uploadData(std::span<const Vertex> vertices, std::span<const std::uint32_t> );
+  void uploadData(std::span<const Vertex> vertices, std::span<const std::uint32_t> indices);
   void createCullingBuffers();
   void createIndirectDrawBuffers();
   void createHieghtMap();
@@ -140,6 +150,7 @@ private:
 
   std::vector<glm::mat4x4> instanceMatrices;
   std::vector<std::uint32_t> instanceMeshes;
+
   std::vector<Mesh> meshes;
   std::vector<RenderElement> renderElements;
   std::vector<RenderElementBoundingBox> relemBoxes;
@@ -147,6 +158,9 @@ private:
 
   etna::Buffer unifiedVbuf;
   etna::Buffer unifiedIbuf;
+
+  std::vector<etna::Image> textures;
+  std::vector<Material> materials;
 
   CullingBuffers cullingBuffers;
 

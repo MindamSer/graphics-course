@@ -1,5 +1,7 @@
 #include "SceneManager.hpp"
 
+#include <cstdint>
+#include <memory>
 #include <stack>
 
 #include <spdlog/spdlog.h>
@@ -240,11 +242,16 @@ SceneManager::ProcessedMeshes SceneManager::processMeshes(const tinygltf::Model&
         .vertexOffset = static_cast<std::uint32_t>(result.vertices.size()),
         .indexOffset = static_cast<std::uint32_t>(result.indices.size()),
         .indexCount = static_cast<std::uint32_t>(accessors[0]->count),
+        .materialIndex = static_cast<std::uint32_t>(prim.material)
       });
 
       result.relemBoxes.push_back(RenderElementBoundingBox{
-        {accessors[1]->maxValues[0], accessors[1]->maxValues[1], accessors[1]->maxValues[2]},
-        {accessors[1]->minValues[0], accessors[1]->minValues[1], accessors[1]->minValues[2]}});
+        {accessors[1]->maxValues[0],
+          accessors[1]->maxValues[1],
+          accessors[1]->maxValues[2]},
+        {accessors[1]->minValues[0],
+          accessors[1]->minValues[1],
+          accessors[1]->minValues[2]}});
 
       const std::size_t vertexCount = accessors[1]->count;
 
@@ -397,15 +404,17 @@ SceneManager::ProcessedMeshes SceneManager::processBakedMeshes(const tinygltf::M
       result.relems.push_back(RenderElement{
         static_cast<std::uint32_t>(positionAccessor.byteOffset / sizeof(Vertex)),
         static_cast<std::uint32_t>(indiciesAccessor.byteOffset / sizeof(std::uint32_t)),
-        static_cast<std::uint32_t>(indiciesAccessor.count)});
+        static_cast<std::uint32_t>(indiciesAccessor.count),
+        static_cast<std::uint32_t>(prim.material)
+      });
 
       result.relemBoxes.push_back(RenderElementBoundingBox{
         {positionAccessor.maxValues[0],
-         positionAccessor.maxValues[1],
-         positionAccessor.maxValues[2]},
+          positionAccessor.maxValues[1],
+          positionAccessor.maxValues[2]},
         {positionAccessor.minValues[0],
-         positionAccessor.minValues[1],
-         positionAccessor.minValues[2]}});
+          positionAccessor.minValues[1],
+          positionAccessor.minValues[2]}});
     }
   }
 
@@ -430,6 +439,8 @@ void SceneManager::selectScene(std::filesystem::path path)
   instanceMatrices = std::move(instMats);
   instanceMeshes = std::move(instMeshes);
 
+  loadMaterials(model);
+
   ProcessedMeshes resultMeshes;
 
   if (path.stem().string().ends_with("_baked"))
@@ -442,6 +453,37 @@ void SceneManager::selectScene(std::filesystem::path path)
   meshes = std::move(resultMeshes.meshes);
 
   uploadData(resultMeshes.vertices, resultMeshes.indices);
+}
+
+void SceneManager::loadMaterials(const tinygltf::Model& model)
+{
+  auto& ctx = etna::get_context();
+
+  textures.reserve(model.images.size());
+  for (const auto& gltfImage : model.images)
+  {
+    auto &newImage = textures.emplace_back(
+      ctx.createImage(etna::Image::CreateInfo{
+        .extent = vk::Extent3D{static_cast<uint32_t>(gltfImage.width), static_cast<uint32_t>(gltfImage.height), 1},
+        .name = gltfImage.name,
+        .format = vk::Format::eR8G8B8A8Unorm,
+        .imageUsage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+      })
+    );
+
+    transferHelper.uploadImage(*oneShotCommands, newImage, 0, 0,
+      std::span<const std::byte>(reinterpret_cast<const std::byte*>(gltfImage.image.data()), gltfImage.width * gltfImage.height * 4));
+  }
+
+  materials.reserve(model.materials.size());
+  for (const auto& gltfMaterial : model.materials)
+  {
+    materials.emplace_back(
+      static_cast<uint32_t>(gltfMaterial.pbrMetallicRoughness.baseColorTexture.index),
+      static_cast<uint32_t>(gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index),
+      static_cast<uint32_t>(gltfMaterial.normalTexture.index)
+    );
+  }
 }
 
 void SceneManager::uploadData(
