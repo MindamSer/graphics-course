@@ -22,6 +22,12 @@ struct RenderElement
   // Material* material;
 };
 
+struct RenderElementBoundingBox
+{
+  glm::vec3 max_pos;
+  glm::vec3 min_pos;
+};
+
 // A mesh is a collection of relems. A scene may have the same mesh
 // located in several different places, so a scene consists of **instances**,
 // not meshes.
@@ -31,18 +37,30 @@ struct Mesh
   std::uint32_t relemCount;
 };
 
-struct RenderElementBoundingBox
-{
-  glm::vec3 max_pos;
-  glm::vec3 min_pos;
-};
-
 struct LightSource
 {
   glm::vec4 pos;
   glm::vec4 dir;
   glm::vec4 color;
 };
+
+
+struct CullingBuffers
+{
+  etna::Buffer relemBuf;
+  etna::Buffer relemBoxBuf;
+  etna::Buffer meshBuf;
+  etna::Buffer instMatricesBuf;
+  etna::Buffer instMeshesBuf;
+};
+
+struct IndirectDrawBuffers
+{
+  etna::Buffer drawCmdBuf;
+  etna::Buffer drawMatricesIndBuf;
+  etna::Buffer matricesOffsetsIndBuf;
+};
+
 
 class SceneManager
 {
@@ -62,22 +80,18 @@ public:
   // Every relem is a single draw call
   std::span<const RenderElement> getRenderElements() { return renderElements; }
 
+
   vk::Buffer getVertexBuffer() { return unifiedVbuf.get(); }
   vk::Buffer getIndexBuffer() { return unifiedIbuf.get(); }
 
-  etna::Buffer* getRelemBuffer() { return &unifiedRelemBuf; }
-  etna::Buffer* getRelemBoxBuffer() { return &unifiedRelemBoxBuf; }
-  etna::Buffer* getMeshBuffer() { return &unifiedMeshBuf; }
-  etna::Buffer* getMatricesBuffer() { return &unifiedInstMatricesBuf; }
-  etna::Buffer* getIMeshesBuffer() { return &unifiedInstMeshesBuf; }
-  etna::Buffer* getDrawCmdBuffer() { return &unifiedDrawCmdBuf; }
-  etna::Buffer* getDrawMatricesIndBuffer() { return &unifiedDrawMatricesIndBuf; }
-  etna::Buffer* getMatricesOffsetsIndBuffer() { return &unifiedMatricesOffsetsIndBuf; }
+  CullingBuffers &getCullingBuffers() { return cullingBuffers; }
 
-  etna::Image* getHieghtMapImage() { return &hieghtMap; }
-  etna::Sampler* getHieghtMapSampler() { return &hieghtMapSampler; };
+  IndirectDrawBuffers &getIndirectDrawBuffers() { return indiretDrawBuffers; }
 
-  etna::Buffer* getLightSourcesBuffer() { return &unifiedLightSourcesBuf; }
+  etna::Image &getHieghtMapImage() { return hieghtMap; }
+  etna::Sampler &getHieghtMapSampler() { return hieghtMapSampler; };
+
+  etna::Buffer &getLightSourcesBuffer() { return unifiedLightSourcesBuf; }
   std::span<const LightSource> getLightSources() { return lights; }
 
   etna::VertexByteStreamFormatDescription getVertexFormatDescription();
@@ -90,7 +104,6 @@ private:
     std::vector<glm::mat4x4> matrices;
     std::vector<std::uint32_t> meshes;
   };
-
   ProcessedInstances processInstances(const tinygltf::Model& model) const;
 
   struct Vertex
@@ -100,7 +113,6 @@ private:
     // First 2 floats are tex coords, 3rd is a packed tangent, 4th is padding
     glm::vec4 texCoordAndTangentAndPadding;
   };
-
   static_assert(sizeof(Vertex) == sizeof(float) * 8);
 
   struct ProcessedMeshes
@@ -113,40 +125,36 @@ private:
   };
   ProcessedMeshes processMeshes(const tinygltf::Model& model) const;
   ProcessedMeshes processBakedMeshes(const tinygltf::Model& model) const;
-  void uploadData(std::span<const Vertex> vertices, std::span<const std::uint32_t>);
+
+  void uploadData(std::span<const Vertex> vertices, std::span<const std::uint32_t> );
+  void createCullingBuffers();
+  void createIndirectDrawBuffers();
+  void createHieghtMap();
+  void createLightSources();
 
 private:
   tinygltf::TinyGLTF loader;
   std::unique_ptr<etna::OneShotCmdMgr> oneShotCommands;
   etna::BlockingTransferHelper transferHelper;
 
-  std::vector<RenderElement> renderElements;
-  std::vector<RenderElementBoundingBox> relemBoxes;
-  std::vector<Mesh> meshes;
+
   std::vector<glm::mat4x4> instanceMatrices;
   std::vector<std::uint32_t> instanceMeshes;
+  std::vector<Mesh> meshes;
+  std::vector<RenderElement> renderElements;
+  std::vector<RenderElementBoundingBox> relemBoxes;
 
-  std::vector<VkDrawIndexedIndirectCommand> drawCmds;
-  std::vector<std::uint32_t> matricesOffsetsInd;
 
   etna::Buffer unifiedVbuf;
   etna::Buffer unifiedIbuf;
 
-  etna::Buffer unifiedRelemBuf;
-  etna::Buffer unifiedRelemBoxBuf;
-  etna::Buffer unifiedMeshBuf;
-  etna::Buffer unifiedInstMatricesBuf;
-  etna::Buffer unifiedInstMeshesBuf;
+  CullingBuffers cullingBuffers;
 
-  etna::Buffer unifiedDrawCmdBuf;
-  etna::Buffer unifiedDrawMatricesIndBuf;
-  etna::Buffer unifiedMatricesOffsetsIndBuf;
+  IndirectDrawBuffers indiretDrawBuffers;
 
   etna::Image hieghtMap;
   etna::Sampler hieghtMapSampler;
-  void genHieghtMap();
 
   std::vector<LightSource> lights;
   etna::Buffer unifiedLightSourcesBuf;
-  void genLightSources();
 };

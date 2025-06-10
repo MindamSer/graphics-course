@@ -4,6 +4,7 @@ add_executable(app_renderer
   App.cpp
   Renderer.cpp
   WorldRenderer.cpp
+  ResourceManager.cpp
 )
 
 target_link_libraries(app_renderer

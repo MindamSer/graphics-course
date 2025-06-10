@@ -11,6 +11,19 @@
 #include "perlin_noise.hpp"
 
 
+static std::uint32_t encode_normal(glm::vec3 normal)
+{
+  const std::int32_t x = static_cast<std::int32_t>(normal.x * 32767.0f);
+  const std::int32_t y = static_cast<std::int32_t>(normal.y * 32767.0f);
+
+  const std::uint32_t sign = normal.z >= 0 ? 0 : 1;
+  const std::uint32_t sx = static_cast<std::uint32_t>(x & 0xfffe) | sign;
+  const std::uint32_t sy = static_cast<std::uint32_t>(y & 0xffff) << 16;
+
+  return sx | sy;
+}
+
+
 SceneManager::SceneManager()
   : oneShotCommands{etna::get_context().createOneShotCmdMgr()}
   , transferHelper{etna::BlockingTransferHelper::CreateInfo{.stagingSize = 4096 * 4096 * 4}}
@@ -132,18 +145,6 @@ SceneManager::ProcessedInstances SceneManager::processInstances(const tinygltf::
     }
 
   return result;
-}
-
-static std::uint32_t encode_normal(glm::vec3 normal)
-{
-  const std::int32_t x = static_cast<std::int32_t>(normal.x * 32767.0f);
-  const std::int32_t y = static_cast<std::int32_t>(normal.y * 32767.0f);
-
-  const std::uint32_t sign = normal.z >= 0 ? 0 : 1;
-  const std::uint32_t sx = static_cast<std::uint32_t>(x & 0xfffe) | sign;
-  const std::uint32_t sy = static_cast<std::uint32_t>(y & 0xffff) << 16;
-
-  return sx | sy;
 }
 
 SceneManager::ProcessedMeshes SceneManager::processMeshes(const tinygltf::Model& model) const
@@ -411,7 +412,179 @@ SceneManager::ProcessedMeshes SceneManager::processBakedMeshes(const tinygltf::M
   return result;
 }
 
-void SceneManager::genHieghtMap()
+
+void SceneManager::selectScene(std::filesystem::path path)
+{
+  auto maybeModel = loadModel(path);
+  if (!maybeModel.has_value())
+    return;
+
+  auto model = std::move(*maybeModel);
+
+  // By aggregating all SceneManager fields mutations here,
+  // we guarantee that we don't forget to clear something
+  // when re-loading a scene.
+
+  // NOTE: you might want to store these on the GPU for GPU-driven rendering.
+  auto [instMats, instMeshes] = processInstances(model);
+  instanceMatrices = std::move(instMats);
+  instanceMeshes = std::move(instMeshes);
+
+  ProcessedMeshes resultMeshes;
+
+  if (path.stem().string().ends_with("_baked"))
+    resultMeshes = processBakedMeshes(model);
+  else
+    resultMeshes = processMeshes(model);
+
+  renderElements = std::move(resultMeshes.relems);
+  relemBoxes = std::move(resultMeshes.relemBoxes);
+  meshes = std::move(resultMeshes.meshes);
+
+  uploadData(resultMeshes.vertices, resultMeshes.indices);
+}
+
+void SceneManager::uploadData(
+  std::span<const Vertex> vertices, std::span<const std::uint32_t> indices)
+{
+  unifiedVbuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = vertices.size_bytes(),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedVbuf",
+  });
+
+  unifiedIbuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = indices.size_bytes(),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedIbuf",
+  });
+
+  transferHelper.uploadBuffer<Vertex>(*oneShotCommands, unifiedVbuf, 0, vertices);
+  transferHelper.uploadBuffer<std::uint32_t>(*oneShotCommands, unifiedIbuf, 0, indices);
+
+
+  createCullingBuffers();
+
+  createIndirectDrawBuffers();
+
+  createHieghtMap();
+
+  createLightSources();
+}
+
+void SceneManager::createCullingBuffers()
+{
+  cullingBuffers.relemBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = renderElements.size() * sizeof(RenderElement),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedRelemBuf",
+  });
+
+  cullingBuffers.relemBoxBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = relemBoxes.size() * sizeof(RenderElementBoundingBox),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedRelemBoxBuf",
+  });
+
+  cullingBuffers.meshBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = meshes.size() * sizeof(Mesh),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedMeshBuf",
+  });
+
+  cullingBuffers.instMatricesBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = instanceMatrices.size() * sizeof(glm::mat4x4),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedInstMatricesBuf",
+  });
+
+  cullingBuffers.instMeshesBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = instanceMeshes.size() * sizeof(std::uint32_t),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedInstMeshesBuf",
+  });
+
+  transferHelper.uploadBuffer<RenderElement>(
+    *oneShotCommands, cullingBuffers.relemBuf, 0, renderElements);
+  transferHelper.uploadBuffer<RenderElementBoundingBox>(
+    *oneShotCommands, cullingBuffers.relemBoxBuf, 0, relemBoxes);
+  transferHelper.uploadBuffer<Mesh>(
+    *oneShotCommands, cullingBuffers.meshBuf, 0, meshes);
+  transferHelper.uploadBuffer<glm::mat4x4>(
+    *oneShotCommands, cullingBuffers.instMatricesBuf, 0, instanceMatrices);
+  transferHelper.uploadBuffer<std::uint32_t>(
+    *oneShotCommands, cullingBuffers.instMeshesBuf, 0, instanceMeshes);
+}
+
+void SceneManager::createIndirectDrawBuffers()
+{
+  std::vector<std::uint32_t> matricesOffsetsInd = {};
+  matricesOffsetsInd.resize(renderElements.size());
+  for (const auto& curMesh : instanceMeshes)
+  {
+    for (std::uint32_t i = 0; i < meshes[curMesh].relemCount - 1; ++i)
+    {
+      ++matricesOffsetsInd[meshes[curMesh].firstRelem + i];
+    }
+  }
+  for (std::uint32_t i = 0; i < renderElements.size() - 1; ++i)
+  {
+    matricesOffsetsInd[i + 1] += matricesOffsetsInd[i];
+  }
+  for (std::uint32_t i = 1; i < renderElements.size(); ++i)
+  {
+    matricesOffsetsInd[i] = matricesOffsetsInd[i - 1];
+  }
+  matricesOffsetsInd[0] = 0;
+
+  std::vector<VkDrawIndexedIndirectCommand> drawCmds = {};
+  for (std::uint32_t i = 0; i < renderElements.size(); ++i)
+  {
+    drawCmds.push_back(VkDrawIndexedIndirectCommand{
+      .indexCount = renderElements[i].indexCount,
+      .instanceCount = 0,
+      .firstIndex = renderElements[i].indexOffset,
+      .vertexOffset = (int)renderElements[i].vertexOffset,
+      .firstInstance = matricesOffsetsInd[i],
+    });
+  }
+
+  indiretDrawBuffers.drawCmdBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = renderElements.size() * sizeof(VkDrawIndexedIndirectCommand),
+    .bufferUsage = vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eTransferDst |
+      vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedDrawCmdBuf",
+  });
+
+  indiretDrawBuffers.drawMatricesIndBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = instanceMatrices.size() * sizeof(std::uint32_t),
+    .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedDrawMatricesIndBuf",
+  });
+
+  indiretDrawBuffers.matricesOffsetsIndBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+    .size = renderElements.size() * sizeof(std::uint32_t),
+    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+    .name = "unifiedMatricesOffsetsIndBuf",
+  });
+
+  transferHelper.uploadBuffer<VkDrawIndexedIndirectCommand>(
+    *oneShotCommands, indiretDrawBuffers.drawCmdBuf, 0, drawCmds);
+  transferHelper.uploadBuffer<std::uint32_t>(
+    *oneShotCommands, indiretDrawBuffers.matricesOffsetsIndBuf, 0, matricesOffsetsInd);
+}
+
+void SceneManager::createHieghtMap()
 {
   hieghtMap = etna::get_context().createImage(etna::Image::CreateInfo{
     .extent = vk::Extent3D{4096, 4096, 1},
@@ -468,7 +641,7 @@ void SceneManager::genHieghtMap()
   delete[] hieghtMapData;
 }
 
-void SceneManager::genLightSources()
+void SceneManager::createLightSources()
 {
   lights =
   {
@@ -500,169 +673,6 @@ void SceneManager::genLightSources()
   transferHelper.uploadBuffer<LightSource>(*oneShotCommands, unifiedLightSourcesBuf, 0, lights);
 }
 
-void SceneManager::uploadData(
-  std::span<const Vertex> vertices, std::span<const std::uint32_t> indices)
-{
-  unifiedVbuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = vertices.size_bytes(),
-    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedVbuf",
-  });
-
-  unifiedIbuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = indices.size_bytes(),
-    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedIbuf",
-  });
-
-  transferHelper.uploadBuffer<Vertex>(*oneShotCommands, unifiedVbuf, 0, vertices);
-  transferHelper.uploadBuffer<std::uint32_t>(*oneShotCommands, unifiedIbuf, 0, indices);
-
-
-
-  unifiedRelemBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = renderElements.size() * sizeof(RenderElement),
-    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedRelemBuf",
-  });
-
-  unifiedRelemBoxBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = relemBoxes.size() * sizeof(RenderElementBoundingBox),
-    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedRelemBoxBuf",
-  });
-
-  unifiedMeshBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = meshes.size() * sizeof(Mesh),
-    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedMeshBuf",
-  });
-
-  unifiedInstMatricesBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = instanceMatrices.size() * sizeof(glm::mat4x4),
-    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedInstMatricesBuf",
-  });
-
-  unifiedInstMeshesBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = instanceMeshes.size() * sizeof(std::uint32_t),
-    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedInstMeshesBuf",
-  });
-
-  transferHelper.uploadBuffer<RenderElement>(
-    *oneShotCommands, unifiedRelemBuf, 0, renderElements);
-  transferHelper.uploadBuffer<RenderElementBoundingBox>(
-    *oneShotCommands, unifiedRelemBoxBuf, 0, relemBoxes);
-  transferHelper.uploadBuffer<Mesh>(
-    *oneShotCommands, unifiedMeshBuf, 0, meshes);
-  transferHelper.uploadBuffer<glm::mat4x4>(
-    *oneShotCommands, unifiedInstMatricesBuf, 0, instanceMatrices);
-  transferHelper.uploadBuffer<std::uint32_t>(
-    *oneShotCommands, unifiedInstMeshesBuf, 0, instanceMeshes);
-
-
-
-  unifiedDrawCmdBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = renderElements.size() * sizeof(VkDrawIndexedIndirectCommand),
-    .bufferUsage = vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eTransferDst |
-      vk::BufferUsageFlagBits::eStorageBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedDrawCmdBuf",
-  });
-
-  unifiedDrawMatricesIndBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = instanceMatrices.size() * sizeof(std::uint32_t),
-    .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedDrawMatricesIndBuf",
-  });
-
-  unifiedMatricesOffsetsIndBuf = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
-    .size = renderElements.size() * sizeof(std::uint32_t),
-    .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-    .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
-    .name = "unifiedMatricesOffsetsIndBuf",
-  });
-
-  transferHelper.uploadBuffer<VkDrawIndexedIndirectCommand>(
-    *oneShotCommands, unifiedDrawCmdBuf, 0, drawCmds);
-  transferHelper.uploadBuffer<std::uint32_t>(
-    *oneShotCommands, unifiedMatricesOffsetsIndBuf, 0, matricesOffsetsInd);
-
-  genHieghtMap();
-
-  genLightSources();
-}
-
-void SceneManager::selectScene(std::filesystem::path path)
-{
-  auto maybeModel = loadModel(path);
-  if (!maybeModel.has_value())
-    return;
-
-  auto model = std::move(*maybeModel);
-
-  // By aggregating all SceneManager fields mutations here,
-  // we guarantee that we don't forget to clear something
-  // when re-loading a scene.
-
-  // NOTE: you might want to store these on the GPU for GPU-driven rendering.
-  auto [instMats, instMeshes] = processInstances(model);
-  instanceMatrices = std::move(instMats);
-  instanceMeshes = std::move(instMeshes);
-
-  ProcessedMeshes resultMeshes;
-
-  if (path.stem().string().ends_with("_baked"))
-    resultMeshes = processBakedMeshes(model);
-  else
-    resultMeshes = processMeshes(model);
-
-  renderElements = std::move(resultMeshes.relems);
-  relemBoxes = std::move(resultMeshes.relemBoxes);
-  meshes = std::move(resultMeshes.meshes);
-
-  matricesOffsetsInd = {};
-  matricesOffsetsInd.resize(renderElements.size());
-  for (const auto& curMesh : instanceMeshes)
-  {
-    for (std::uint32_t i = 0; i < meshes[curMesh].relemCount - 1; ++i)
-    {
-      ++matricesOffsetsInd[meshes[curMesh].firstRelem + i];
-    }
-  }
-  for (std::uint32_t i = 0; i < renderElements.size() - 1; ++i)
-  {
-    matricesOffsetsInd[i + 1] += matricesOffsetsInd[i];
-  }
-  for (std::uint32_t i = 1; i < renderElements.size(); ++i)
-  {
-    matricesOffsetsInd[i] = matricesOffsetsInd[i - 1];
-  }
-  matricesOffsetsInd[0] = 0;
-
-  drawCmds = {};
-  for (std::uint32_t i = 0; i < renderElements.size(); ++i)
-  {
-    drawCmds.push_back(VkDrawIndexedIndirectCommand{
-      .indexCount = renderElements[i].indexCount,
-      .instanceCount = 0,
-      .firstIndex = renderElements[i].indexOffset,
-      .vertexOffset = (int)renderElements[i].vertexOffset,
-      .firstInstance = matricesOffsetsInd[i],
-    });
-  }
-
-  uploadData(resultMeshes.vertices, resultMeshes.indices);
-}
 
 etna::VertexByteStreamFormatDescription SceneManager::getVertexFormatDescription()
 {
