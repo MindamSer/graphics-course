@@ -6,6 +6,9 @@
 #include <etna/PipelineManager.hpp>
 #include <etna/Profiling.hpp>
 
+#include <imgui.h>
+#include <gui/ImGuiRenderer.hpp>
+
 
 Renderer::Renderer(glm::uvec2 res)
   : resolution{res}
@@ -23,13 +26,20 @@ void Renderer::initVulkan(std::span<const char*> instance_extensions)
 
   deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
   deviceExtensions.push_back(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME);
+  deviceExtensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+  deviceExtensions.push_back(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
 
   etna::initialize(etna::InitParams{
     .applicationName = "app_renderer",
     .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
     .instanceExtensions = instanceExtensions,
     .deviceExtensions = deviceExtensions,
-    .features = vk::PhysicalDeviceFeatures2{.features = {.tessellationShader = 1}},
+    .features = vk::PhysicalDeviceFeatures2{
+      .features = {
+        .tessellationShader = 1,
+        .multiDrawIndirect = 1,
+      }
+    },
     .physicalDeviceIndexOverride = {},
     .numFramesInFlight = 2,
   });
@@ -59,6 +69,8 @@ void Renderer::initFrameDelivery(vk::UniqueSurfaceKHR a_surface, ResolutionProvi
   worldRenderer->allocateResources(resolution);
   worldRenderer->loadShaders();
   worldRenderer->setupPipelines(window->getCurrentFormat());
+
+  guiRenderer = std::make_unique<ImGuiRenderer>(window->getCurrentFormat());
 }
 
 void Renderer::loadScene(std::filesystem::path path)
@@ -94,6 +106,14 @@ void Renderer::drawFrame()
 {
   ZoneScoped;
 
+  {
+    ZoneScopedN("drawGui");
+    guiRenderer->nextFrame();
+    ImGui::NewFrame();
+    worldRenderer->drawGui();
+    ImGui::Render();
+  }
+
   auto currentCmdBuf = commandManager->acquireNext();
 
   etna::begin_frame();
@@ -109,6 +129,12 @@ void Renderer::drawFrame()
       ETNA_PROFILE_GPU(currentCmdBuf, renderFrame);
 
       worldRenderer->renderWorld(currentCmdBuf, image, view);
+
+      {
+        ImDrawData* pDrawData = ImGui::GetDrawData();
+        guiRenderer->render(
+          currentCmdBuf, {{0, 0}, {resolution.x, resolution.y}}, image, view, pDrawData);
+      }
 
       etna::set_state(
         currentCmdBuf,

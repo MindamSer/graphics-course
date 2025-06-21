@@ -1,22 +1,24 @@
 #version 460
 
+
 struct RenderElement
 {
   uint vertexOffset;
   uint indexOffset;
   uint indexCount;
+  int materialIndex;
+};
+
+struct RelemBoundingBox
+{
+  vec4 max_pos;
+  vec4 min_pos;
 };
 
 struct Mesh
 {
   uint firstRelem;
   uint relemCount;
-};
-
-struct RelemBoundingBox
-{
-  vec3 max_pos;
-  vec3 min_pos;
 };
 
 struct VkDrawIndexedIndirectCommand
@@ -28,36 +30,8 @@ struct VkDrawIndexedIndirectCommand
   uint firstInstance;
 };
 
-layout(local_size_x = 256) in;
 
-layout(binding = 0) buffer RelemBoxBuffer
-{
-    RelemBoundingBox RelemBoxBuf[];
-};
-layout(binding = 1) buffer MeshBuffer
-{
-    Mesh MeshBuf[];
-};
-layout(binding = 2) buffer MatricesBuffer
-{
-    mat4x4 InstMatricesBuf[];
-};
-layout(binding = 3) buffer IMeshesBuffer
-{
-    uint InstMeshesBuf[];
-};
-layout(binding = 4) buffer DrawCmdBuffer
-{
-    VkDrawIndexedIndirectCommand DrawCmdBuf[];
-};
-layout(binding = 5) buffer DrawMatricesIndBuffer
-{
-    uint DrawMatricesIndBuf[];
-};
-layout(binding = 6) buffer MatricesOffsetsIndBuffer
-{
-    uint MatricesOffsetsIndBuf[];
-};
+layout(local_size_x = 256) in;
 
 layout(push_constant) uniform params
 {
@@ -66,9 +40,42 @@ layout(push_constant) uniform params
   uint relemCount;
 } pushConstant;
 
+
+layout(binding = 0) readonly buffer InstanceMatricesBuffer
+{
+    mat4x4 instanceMatrices[];
+};
+layout(binding = 1) readonly buffer InstanceMeshesIndiciesBuffer
+{
+    uint meshesIndicies[];
+};
+layout(binding = 2) readonly buffer MeshesBuffer
+{
+    Mesh meshes[];
+};
+layout(binding = 3) readonly buffer RenderElementsBuffer
+{
+    RenderElement renderElements[];
+};
+layout(binding = 4) readonly buffer RelemBoundingBoxesBuffer
+{
+    RelemBoundingBox relemBoundingBoxes[];
+};
+
+layout(binding = 5) buffer DrawCommandsBuffer
+{
+    VkDrawIndexedIndirectCommand drawCommands[];
+};
+layout(binding = 6) buffer DrawMatricesIndiciesBuffer
+{
+    uint drawMatricesIndicies[];
+};
+
+
+
 void main() {
     uint instanseIndex = gl_GlobalInvocationID.x;
-    
+
     if (instanseIndex >= pushConstant.instanceCount)
         return;
 
@@ -76,47 +83,58 @@ void main() {
     {
         for(uint i = 0; i < pushConstant.relemCount; ++i)
         {
-            DrawCmdBuf[i].instanceCount = 0;
+            drawCommands[i].instanceCount = 0;
         }
     }
     barrier();
-    
-    for (uint relemInMeshIndex = 0; relemInMeshIndex < MeshBuf[InstMeshesBuf[instanseIndex]].relemCount; ++relemInMeshIndex)
-    {
-        uint curRelemIndex = MeshBuf[InstMeshesBuf[instanseIndex]].firstRelem + relemInMeshIndex;
-    
-        RelemBoundingBox curRelemBB = RelemBoxBuf[curRelemIndex];
 
-        vec4 boxVertices[8] = 
+    Mesh instanceMesh = meshes[meshesIndicies[instanseIndex]];
+
+    for (uint relemInMeshIndex = 0; relemInMeshIndex < instanceMesh.relemCount; ++relemInMeshIndex)
+    {
+        uint relemIndex = instanceMesh.firstRelem + relemInMeshIndex;
+
+        RelemBoundingBox relemBoundingBox = relemBoundingBoxes[relemIndex];
+
+        vec4 boxVertices[8] =
         {
-        vec4(curRelemBB.min_pos.x, curRelemBB.min_pos.y, curRelemBB.min_pos.z, 1.0f),
-        vec4(curRelemBB.max_pos.x, curRelemBB.min_pos.y, curRelemBB.min_pos.z, 1.0f),
-        vec4(curRelemBB.min_pos.x, curRelemBB.max_pos.y, curRelemBB.min_pos.z, 1.0f),
-        vec4(curRelemBB.max_pos.x, curRelemBB.max_pos.y, curRelemBB.min_pos.z, 1.0f),
-        vec4(curRelemBB.min_pos.x, curRelemBB.min_pos.y, curRelemBB.max_pos.z, 1.0f),
-        vec4(curRelemBB.max_pos.x, curRelemBB.min_pos.y, curRelemBB.max_pos.z, 1.0f),
-        vec4(curRelemBB.min_pos.x, curRelemBB.max_pos.y, curRelemBB.max_pos.z, 1.0f),
-        vec4(curRelemBB.max_pos.x, curRelemBB.max_pos.y, curRelemBB.max_pos.z, 1.0f),
+            vec4(relemBoundingBox.min_pos.x, relemBoundingBox.min_pos.y, relemBoundingBox.min_pos.z, 1.0f),
+            vec4(relemBoundingBox.max_pos.x, relemBoundingBox.min_pos.y, relemBoundingBox.min_pos.z, 1.0f),
+            vec4(relemBoundingBox.min_pos.x, relemBoundingBox.max_pos.y, relemBoundingBox.min_pos.z, 1.0f),
+            vec4(relemBoundingBox.max_pos.x, relemBoundingBox.max_pos.y, relemBoundingBox.min_pos.z, 1.0f),
+            vec4(relemBoundingBox.min_pos.x, relemBoundingBox.min_pos.y, relemBoundingBox.max_pos.z, 1.0f),
+            vec4(relemBoundingBox.max_pos.x, relemBoundingBox.min_pos.y, relemBoundingBox.max_pos.z, 1.0f),
+            vec4(relemBoundingBox.min_pos.x, relemBoundingBox.max_pos.y, relemBoundingBox.max_pos.z, 1.0f),
+            vec4(relemBoundingBox.max_pos.x, relemBoundingBox.max_pos.y, relemBoundingBox.max_pos.z, 1.0f),
+        };
+
+        bool allBehindPlane[6] =
+        {
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
         };
 
         for (int i = 0; i < 8; ++i)
         {
-            boxVertices[i] = pushConstant.mProjView * vec4((InstMatricesBuf[instanseIndex] * boxVertices[i]).xyz, 1.0f);
+            boxVertices[i] = pushConstant.mProjView * instanceMatrices[instanseIndex] * boxVertices[i];
+            boxVertices[i] /= boxVertices[i].w;
+
+            allBehindPlane[0] = allBehindPlane[0] && (boxVertices[i].x >  1.5f);
+            allBehindPlane[1] = allBehindPlane[1] && (boxVertices[i].x < -1.5f);
+            allBehindPlane[2] = allBehindPlane[2] && (boxVertices[i].y >  1.5f);
+            allBehindPlane[3] = allBehindPlane[3] && (boxVertices[i].y < -1.5f);
+            allBehindPlane[4] = allBehindPlane[4] && (boxVertices[i].z >  1.5f);
+            allBehindPlane[5] = allBehindPlane[5] && (boxVertices[i].z < -0.5f);
         }
 
-        bool visible = false;
-        for (int i = 0; i < 8; ++i)
+        if (!(allBehindPlane[0] || allBehindPlane[1] || allBehindPlane[2] || allBehindPlane[3] || allBehindPlane[4] || allBehindPlane[5]))
         {
-            visible = visible ||
-            boxVertices[i].z > 0.0 &&
-            boxVertices[i].z / abs(boxVertices[i].x) > 1.0 &&
-            boxVertices[i].z / abs(boxVertices[i].y) > 1.0;
-        }
-    
-        if (visible)
-        {
-            uint curMatrixIndex = atomicAdd(DrawCmdBuf[curRelemIndex].instanceCount, 1);
-            DrawMatricesIndBuf[MatricesOffsetsIndBuf[curRelemIndex] + curMatrixIndex] = instanseIndex;
+            uint curMatrixIndex = atomicAdd(drawCommands[relemIndex].instanceCount, 1);
+            drawMatricesIndicies[drawCommands[relemIndex].firstInstance + curMatrixIndex] = instanseIndex;
         }
     }
 }

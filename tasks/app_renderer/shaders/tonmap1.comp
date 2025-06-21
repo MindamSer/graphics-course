@@ -2,7 +2,6 @@
 #extension GL_EXT_shader_atomic_float : enable
 
 
-
 layout(local_size_x = 32, local_size_y = 32) in;
 
 layout(push_constant) uniform params
@@ -10,18 +9,16 @@ layout(push_constant) uniform params
   uvec2 res;
 } pushConstant;
 
-layout(binding = 0, r11f_g11f_b10f) uniform image2D colorTex;
 
+layout(binding = 0, r11f_g11f_b10f) uniform image2D colorTex;
 layout(binding = 1) buffer MaxLuminanceBuffer
 {
   float maxLuminanceBuf[];
 };
-
 layout(binding = 2) buffer LuminanceHistBuffer
 {
   float luminanceHistBuf[];
 };
-
 
 
 float log10(float x)
@@ -34,6 +31,7 @@ float minLogLum = log10(maxLuminanceBuf[0]);
 float maxLogLum = log10(maxLuminanceBuf[1]);
 
 shared uint localHist[256];
+
 
 
 void main() {
@@ -61,13 +59,13 @@ void main() {
     float logLum = log10(luminance);
     float normLogLum = (logLum - minLogLum) / (maxLogLum - minLogLum);
     int logLumLevel = min(int(floor(normLogLum * 256.0f)), 255);
-  
+
     atomicAdd(localHist[logLumLevel], 1);
   }
   memoryBarrierShared();
   barrier();
-  
-  
+
+
   if (gl_LocalInvocationID.y < 8)
   {
     uint i = gl_LocalInvocationID.y * 32 + gl_LocalInvocationID.x;

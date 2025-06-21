@@ -1,9 +1,17 @@
 #version 460
-#extension GL_ARB_separate_shader_objects : enable
+#extension GL_KHR_vulkan_glsl : enable
 #extension GL_GOOGLE_include_directive : require
 
 #include "unpack_attributes.glsl"
 
+
+struct RenderElement
+{
+  uint vertexOffset;
+  uint indexOffset;
+  uint indexCount;
+  int materialIndex;
+};
 
 
 layout(push_constant) uniform params
@@ -11,25 +19,32 @@ layout(push_constant) uniform params
   mat4 mProjView;
 } pushConstant;
 
-layout(binding = 0) readonly buffer MatricesBuffer
+
+layout(binding = 0) readonly buffer InstanceMatricesBuffer
 {
-    mat4x4 InstMatricesBuf[];
+  mat4x4 instanceMatrices[];
 };
-layout(binding = 1) readonly buffer DrawMatricesIndBuffer
+layout(binding = 1) readonly buffer RenderElementsBuffer
 {
-    uint DrawMatricesIndBuf[];
+  RenderElement renderElements[];
 };
+layout(binding = 2) readonly buffer DrawMatricesIndiciesBuffer
+{
+  uint drawMatricesIndicies[];
+};
+
 
 layout(location = 0) in vec4 vPosNorm;
 
 layout(location = 1) in vec4 vTexCoordAndTang;
 
-layout (location = 0 ) out VS_OUT
+layout(location = 0) out VS_OUT
 {
   vec3 wPos;
   vec3 wNorm;
   vec3 wTangent;
-  vec2 texCoord;
+  vec2 wTexCoord;
+  flat int materialIndex;
 } vOut;
 
 out gl_PerVertex { vec4 gl_Position; };
@@ -38,15 +53,22 @@ out gl_PerVertex { vec4 gl_Position; };
 
 void main(void)
 {
-  uint curMatrixIndex = DrawMatricesIndBuf[gl_InstanceIndex];
+  const vec3 vPos = vPosNorm.xyz;
+  const vec3 vNorm = decode_baked_normal(floatBitsToUint(vPosNorm.w));
+  const vec3 vTang = decode_baked_normal(floatBitsToUint(vTexCoordAndTang.z));
+  const vec2 vTexCoord = vTexCoordAndTang.xy;
 
-  const vec4 wNorm = vec4(decode_baked_normal(floatBitsToUint(vPosNorm.w)),     0.0f);
-  const vec4 wTang = vec4(decode_baked_normal(floatBitsToUint(vTexCoordAndTang.z)), 0.0f);
-  
-  vOut.wPos   = (InstMatricesBuf[curMatrixIndex] * vec4(vPosNorm.xyz, 1.0f)).xyz;
-  vOut.wNorm  = normalize(mat3(transpose(inverse(InstMatricesBuf[curMatrixIndex]))) * wNorm.xyz);
-  vOut.wTangent = normalize(mat3(transpose(inverse(InstMatricesBuf[curMatrixIndex]))) * wTang.xyz);
-  vOut.texCoord = vTexCoordAndTang.xy;
-  
-  gl_Position   = pushConstant.mProjView * vec4(vOut.wPos, 1.0);
+  const mat4x4 instanceMatrix = instanceMatrices[drawMatricesIndicies[gl_InstanceIndex]];
+
+
+  vec4 wPos = instanceMatrix * vec4(vPos, 1.0f);
+  gl_Position = pushConstant.mProjView * wPos;
+  wPos = wPos / wPos.w;
+
+
+  vOut.wPos      = wPos.xyz;
+  vOut.wNorm     = normalize(mat3(transpose(inverse(instanceMatrix))) * vNorm);
+  vOut.wTangent  = normalize(mat3(transpose(inverse(instanceMatrix))) * vTang);
+  vOut.wTexCoord = vTexCoord;
+  vOut.materialIndex = renderElements[gl_DrawID].materialIndex;
 }

@@ -1,7 +1,6 @@
 #version 460
-#extension GL_ARB_separate_shader_objects : enable
 #extension GL_KHR_vulkan_glsl : enable
-
+#extension GL_ARB_separate_shader_objects : enable
 
 
 layout(vertices = 4) out;
@@ -22,7 +21,7 @@ void main()
 
   	vec2 farPoint = max(abs(maxPoint), abs(minPoint));
   	float maxDist = max(farPoint.x, farPoint.y);
-  	
+
 
 
   	int k = 1;
@@ -31,7 +30,7 @@ void main()
   	  maxDist -= 3.;
   	  k *= 2;
   	}
-  	
+
   	gl_TessLevelOuter[0] = 64 / k;
   	gl_TessLevelOuter[1] = 64 / k;
   	gl_TessLevelOuter[2] = 64 / k;

@@ -74,8 +74,8 @@
   "buffers": [
     {
       "byteLength": 21184,
-      "name": "Avocado_baked",
-      "uri": "Avocado_baked.bin"
+      "name": "scene_baked",
+      "uri": "scene_baked.bin"
     }
   ],
   "extensionsRequired": [

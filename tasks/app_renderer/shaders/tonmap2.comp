@@ -2,19 +2,16 @@
 #extension GL_EXT_shader_atomic_float : enable
 
 
-
 layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(binding = 0) buffer MaxLuminanceBuffer
 {
   float maxLuminanceBuf[];
 };
-
 layout(binding = 1) buffer LuminanceHistBuffer
 {
   float luminanceHistBuf[];
 };
-
 
 
 float log10(float x)
@@ -50,7 +47,6 @@ float dL(float La)
 
     return pow(10, dLLa);
 }
-
 
 
 float Bdmin = log10(5.e-2f);
@@ -95,19 +91,19 @@ void main() {
   barrier();
 
   if (T != 0.f)
-  {  
+  {
     float Ld = 0.f;
     float Lw = 0.f;
     float binCeil = 0.f;
-  
+
     while (cutted > T * tolerancePerc)
     {
       cutted = 0.f;
       P[i] = f[i];
-  
+
       memoryBarrierShared();
       barrier();
-  
+
       if (i == 0)
       {
         for (int k = 1; k < 256; ++k)
@@ -116,12 +112,12 @@ void main() {
         }
         T = P[255];
       }
-  
+
       memoryBarrierShared();
       barrier();
-  
+
       P[i] /= T;
-  
+
       Lw = pow(10.f, Bwmin + db * i);
       Ld = pow(10.f, Bdmin + (Bdmax - Bdmin) * P[i]);
       binCeil = ceil(dL(Ld) * Lw * T * db / (dL(Lw) * Ld * (Bdmax - Bdmin)));
@@ -130,7 +126,7 @@ void main() {
         atomicAdd(cutted, f[i] - binCeil);
         f[i] = binCeil;
       }
-  
+
       memoryBarrierShared();
       barrier();
     }

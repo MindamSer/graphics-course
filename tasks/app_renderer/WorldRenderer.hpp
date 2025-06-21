@@ -5,6 +5,7 @@
 #include <etna/Buffer.hpp>
 #include <etna/ComputePipeline.hpp>
 #include <etna/GraphicsPipeline.hpp>
+#include "etna/DescriptorSet.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 
@@ -21,15 +22,15 @@ class WorldRenderer
 public:
   WorldRenderer();
 
-  void loadScene(std::filesystem::path path);
-
   void loadShaders();
   void allocateResources(glm::uvec2 swapchain_resolution);
   void setupPipelines(vk::Format swapchain_format);
 
-  void debugInput(const Keyboard& kb);
+  void loadScene(std::filesystem::path path);
   void update(const FramePacket& packet);
+  void debugInput(const Keyboard& kb);
   void drawGui();
+
   void renderWorld(
     vk::CommandBuffer cmd_buf, vk::Image target_image, vk::ImageView target_image_view);
 
@@ -45,6 +46,9 @@ private:
   std::unique_ptr<SceneManager> sceneMgr;
   std::unique_ptr<ResourceManager> resourceMgr;
 
+  bool drawBoundingBoxes = false;
+  bool drawLights = false;
+
 
   glm::uvec2 resolution;
   etna::Image mainViewDepth;
@@ -52,12 +56,15 @@ private:
 
 
   etna::ComputePipeline cullingPipeline;
+  etna::PersistentDescriptorSet cullingDescSet;
 
   etna::GraphicsPipeline staticMeshPipeline;
+  etna::PersistentDescriptorSet staticMeshDescSet;
 
   etna::GraphicsPipeline terrainPipeline;
 
   etna::GraphicsPipeline defferedShadingPipeline;
+  etna::PersistentDescriptorSet deferredDescSet;
 
   etna::ComputePipeline tonmap0Pipeline;
   etna::ComputePipeline tonmap1Pipeline;

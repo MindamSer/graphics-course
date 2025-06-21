@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 
+#include <glm/fwd.hpp>
 #include <glm/glm.hpp>
 #include <tiny_gltf.h>
 #include <etna/Buffer.hpp>
@@ -14,9 +15,12 @@
 
 struct Material
 {
-  uint32_t albedoTexIndex;
-  uint32_t metRouTexIndex;
-  uint32_t normalTexIndex;
+  glm::vec4 baseColorFactor;
+  glm::vec4 metalRougFactor;
+  int albedoTexIndex;
+  int metRouTexIndex;
+  int normalTexIndex;
+  int _padding;
 };
 
 
@@ -27,13 +31,13 @@ struct RenderElement
   std::uint32_t vertexOffset;
   std::uint32_t indexOffset;
   std::uint32_t indexCount;
-  std::uint32_t materialIndex;
+  int materialIndex;
 };
 
 struct RenderElementBoundingBox
 {
-  glm::vec3 max_pos;
-  glm::vec3 min_pos;
+  glm::vec4 max_pos;
+  glm::vec4 min_pos;
 };
 
 // A mesh is a collection of relems. A scene may have the same mesh
@@ -53,20 +57,19 @@ struct LightSource
 };
 
 
-struct CullingBuffers
+struct InstancingBuffers
 {
-  etna::Buffer relemBuf;
-  etna::Buffer relemBoxBuf;
-  etna::Buffer meshBuf;
-  etna::Buffer instMatricesBuf;
-  etna::Buffer instMeshesBuf;
+  etna::Buffer instanceMatrices;
+  etna::Buffer instanceMeshesIndicies;
+  etna::Buffer meshes;
+  etna::Buffer renderElements;
+  etna::Buffer renderElementBoxes;
 };
 
 struct IndirectDrawBuffers
 {
-  etna::Buffer drawCmdBuf;
-  etna::Buffer drawMatricesIndBuf;
-  etna::Buffer matricesOffsetsIndBuf;
+  etna::Buffer drawCommands;
+  etna::Buffer drawMatricesIndicies;
 };
 
 
@@ -77,32 +80,40 @@ public:
 
   void selectScene(std::filesystem::path path);
 
+
   // Every instance is a mesh drawn with a certain transform
   // NOTE: maybe you can pass some additional data through unused matrix entries?
   std::span<const glm::mat4x4> getInstanceMatrices() { return instanceMatrices; }
-  std::span<const std::uint32_t> getInstanceMeshes() { return instanceMeshes; }
+  std::span<const std::uint32_t> getInstanceMeshes() { return instanceMeshIndicies; }
 
   // Every mesh is a collection of relems
   std::span<const Mesh> getMeshes() { return meshes; }
-
-  // Every relem is a single draw call
   std::span<const RenderElement> getRenderElements() { return renderElements; }
+  std::span<const RenderElementBoundingBox> getRenderElementsBoxes() { return relemBoxes; }
+
+  // Every material is set of 3 textures - albedo, roughness and normal map
+  std::span<const Material> getMaterials() { return materials; }
+  std::span<const etna::Image> getTextures() { return textures; }
 
 
   vk::Buffer getVertexBuffer() { return unifiedVbuf.get(); }
   vk::Buffer getIndexBuffer() { return unifiedIbuf.get(); }
 
-  CullingBuffers &getCullingBuffers() { return cullingBuffers; }
+  InstancingBuffers &getInstancingBuffers() { return instancingBuffers; }
 
   IndirectDrawBuffers &getIndirectDrawBuffers() { return indiretDrawBuffers; }
+
+  etna::Buffer &getMaterialsBuffer() { return materialsBuffer; }
 
   etna::Image &getHieghtMapImage() { return hieghtMap; }
   etna::Sampler &getHieghtMapSampler() { return hieghtMapSampler; };
 
-  etna::Buffer &getLightSourcesBuffer() { return unifiedLightSourcesBuf; }
-  std::span<const LightSource> getLightSources() { return lights; }
+  std::vector<LightSource> &getLightSources() { return lights; }
+  etna::Buffer &getLightSourcesBuffer() { return lightSourcesBuffer; }
+  std::byte *getLightsBufferPtr() { return lightsBufferPtr; }
 
   etna::VertexByteStreamFormatDescription getVertexFormatDescription();
+
 
 private:
   std::optional<tinygltf::Model> loadModel(std::filesystem::path path);
@@ -142,6 +153,7 @@ private:
   void createHieghtMap();
   void createLightSources();
 
+
 private:
   tinygltf::TinyGLTF loader;
   std::unique_ptr<etna::OneShotCmdMgr> oneShotCommands;
@@ -149,26 +161,28 @@ private:
 
 
   std::vector<glm::mat4x4> instanceMatrices;
-  std::vector<std::uint32_t> instanceMeshes;
-
+  std::vector<std::uint32_t> instanceMeshIndicies;
   std::vector<Mesh> meshes;
   std::vector<RenderElement> renderElements;
   std::vector<RenderElementBoundingBox> relemBoxes;
+
+  std::vector<Material> materials;
+  std::vector<etna::Image> textures;
 
 
   etna::Buffer unifiedVbuf;
   etna::Buffer unifiedIbuf;
 
-  std::vector<etna::Image> textures;
-  std::vector<Material> materials;
-
-  CullingBuffers cullingBuffers;
+  InstancingBuffers instancingBuffers;
 
   IndirectDrawBuffers indiretDrawBuffers;
+
+  etna::Buffer materialsBuffer;
 
   etna::Image hieghtMap;
   etna::Sampler hieghtMapSampler;
 
   std::vector<LightSource> lights;
-  etna::Buffer unifiedLightSourcesBuf;
+  etna::Buffer lightSourcesBuffer;
+  std::byte *lightsBufferPtr;
 };

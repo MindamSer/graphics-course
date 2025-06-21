@@ -8,9 +8,10 @@
 
 struct Gbuffer
 {
-  etna::Image Albedo;
-  etna::Image Normal;
-  etna::Image Depth;
+  etna::Image albedo;
+  etna::Image normal;
+  etna::Image metRou;
+  etna::Image depth;
 };
 
 struct HDRresources

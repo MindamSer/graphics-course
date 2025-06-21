@@ -1,10 +1,7 @@
 #version 460
-#extension GL_ARB_separate_shader_objects : enable
 #extension GL_KHR_vulkan_glsl : enable
+#extension GL_ARB_separate_shader_objects : enable
 
-
-
-layout(quads, equal_spacing, ccw) in;
 
 layout(push_constant) uniform params
 {
@@ -12,14 +9,17 @@ layout(push_constant) uniform params
   vec3 cameraPos;
 } pushConstant;
 
+
 layout(binding = 0) uniform sampler2D colorTex;
+
+
+layout(quads, equal_spacing, ccw) in;
 
 layout (location = 0 ) out VS_OUT
 {
   vec3 pos;
   vec3 norm;
 } vOut;
-
 
 
 float H(vec2 coord)
@@ -48,15 +48,15 @@ void main()
 
   float u = gl_TessCoord.x;
   float v = gl_TessCoord.y;
-  
+
   vec4 pos0 = gl_in[0].gl_Position;
   vec4 pos1 = gl_in[1].gl_Position;
   vec4 pos2 = gl_in[2].gl_Position;
   vec4 pos3 = gl_in[3].gl_Position;
-  
+
   vec4 leftPos = pos0 + v * (pos3 - pos0);
   vec4 rightPos = pos1 + v * (pos2 - pos1);
-  
+
   vec4 pos = leftPos + u * (rightPos - leftPos);
 
 
@@ -70,6 +70,6 @@ void main()
 
   vOut.pos = pos.xyz;
   vOut.norm = getNorm(hmCoord, hmScale).xzy;
-  
+
   gl_Position = pushConstant.mProjView * pos;
 }

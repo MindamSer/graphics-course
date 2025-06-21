@@ -54,7 +54,7 @@ CPMAddPackage(
 CPMAddPackage(
   NAME etna
   GITHUB_REPOSITORY MindamSer/etna
-  VERSION 1.9.0
+  VERSION 1.9.1
 )
 
 # Type-erased function containers that actually work

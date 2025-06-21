@@ -1,20 +1,17 @@
 #version 460
-#extension GL_ARB_separate_shader_objects : enable
 #extension GL_KHR_vulkan_glsl : enable
 
 
-
 layout(binding = 0) uniform sampler2D colorTex;
-
 layout(binding = 1) readonly buffer MaxLuminanceBuffer
 {
   float maxLuminanceBuf[];
 };
-
 layout(binding = 2) readonly buffer LuminanceHistBuffer
 {
   float luminanceHistBuf[];
 };
+
 
 layout (location = 0 ) in VS_OUT
 {
@@ -22,7 +19,6 @@ layout (location = 0 ) in VS_OUT
 } surf;
 
 layout(location = 0) out vec4 out_fragColor;
-
 
 
 float log10(float x)
@@ -51,7 +47,7 @@ void main() {
       float normBw = (Bw - Bwmin) / (Bwmax - Bwmin);
       int BwLevel = min(int(floor(normBw * 256.0f)), 255);
       float histValue = luminanceHistBuf[BwLevel];
-      
+
       float Bde = log10(Ldmin) + (log10(Ldmax) - log10(Ldmin)) * histValue;
       float Ld = pow(10, Bde);
 

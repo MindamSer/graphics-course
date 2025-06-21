@@ -8,7 +8,7 @@ void ResourceManager::allocateResources(glm::uvec2 resolution)
 
   hdrResources.HDRImage = ctx.createImage(etna::Image::CreateInfo{
   .extent = vk::Extent3D{resolution.x, resolution.y, 1},
-  .name = "HDR_image",
+  .name = "HDRImage",
   .format = vk::Format::eB10G11R11UfloatPack32,
   .imageUsage = vk::ImageUsageFlagBits::eColorAttachment |
                 vk::ImageUsageFlagBits::eSampled |
@@ -30,23 +30,30 @@ void ResourceManager::allocateResources(glm::uvec2 resolution)
   });
 
   gBuffer = {
-    .Albedo = ctx.createImage(etna::Image::CreateInfo{
+    .albedo = ctx.createImage(etna::Image::CreateInfo{
       .extent = vk::Extent3D{resolution.x, resolution.y, 1},
-      .name = "G_buffer_albedo",
-      .format = vk::Format::eR32Sfloat,
+      .name = "GbufferAlbedo",
+      .format = vk::Format::eR8G8B8A8Unorm,
       .imageUsage = vk::ImageUsageFlagBits::eColorAttachment |
                     vk::ImageUsageFlagBits::eSampled,
     }),
-    .Normal = ctx.createImage(etna::Image::CreateInfo{
+    .normal = ctx.createImage(etna::Image::CreateInfo{
       .extent = vk::Extent3D{resolution.x, resolution.y, 1},
-      .name = "G_buffer_normal",
+      .name = "GbufferNormal",
       .format = vk::Format::eR8G8B8A8Snorm,
       .imageUsage = vk::ImageUsageFlagBits::eColorAttachment |
                     vk::ImageUsageFlagBits::eSampled,
     }),
-    .Depth = ctx.createImage(etna::Image::CreateInfo{
+    .metRou = ctx.createImage(etna::Image::CreateInfo{
       .extent = vk::Extent3D{resolution.x, resolution.y, 1},
-      .name = "G_buffer_depth",
+      .name = "GbufferMetallicRoughness",
+      .format = vk::Format::eR8G8B8A8Unorm,
+      .imageUsage = vk::ImageUsageFlagBits::eColorAttachment |
+                    vk::ImageUsageFlagBits::eSampled,
+    }),
+    .depth = ctx.createImage(etna::Image::CreateInfo{
+      .extent = vk::Extent3D{resolution.x, resolution.y, 1},
+      .name = "GbufferDepth",
       .format = vk::Format::eD32Sfloat,
       .imageUsage = vk::ImageUsageFlagBits::eDepthStencilAttachment |
                     vk::ImageUsageFlagBits::eSampled,
