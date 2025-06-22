@@ -38,6 +38,7 @@ private:
   void cullScene(vk::CommandBuffer cmd_buf);
   void renderScene(vk::CommandBuffer cmd_buf);
   void renderTerrain(vk::CommandBuffer cmd_buf);
+  void computeSSAO(vk::CommandBuffer cmd_buf);
   void deferredShading(vk::CommandBuffer cmd_buf);
   void postProcess(vk::CommandBuffer cmd_buf);
   void copyHDRtoLDR(vk::CommandBuffer cmd_buf);
@@ -48,6 +49,7 @@ private:
 
   bool drawBoundingBoxes = false;
   bool drawLights = false;
+  bool enableSSAO = true;
 
 
   glm::uvec2 resolution;
@@ -62,6 +64,8 @@ private:
   etna::PersistentDescriptorSet staticMeshDescSet;
 
   etna::GraphicsPipeline terrainPipeline;
+
+  etna::ComputePipeline ssaoPipline;
 
   etna::GraphicsPipeline defferedShadingPipeline;
   etna::PersistentDescriptorSet deferredDescSet;
@@ -101,6 +105,12 @@ private:
     glm::mat4x4 projView;
     glm::vec3 cameraPos;
   } terrainPC;
+
+  struct SSAOPushConstants
+  {
+    glm::uvec2 res;
+    glm::mat4 proj;
+  } ssaoPC;
 
   struct DeferredPushConstants
   {

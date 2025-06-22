@@ -31,9 +31,12 @@ public:
 
   Gbuffer &getGbuffer() { return gBuffer; }
   HDRresources &getHDRresources() { return hdrResources; }
+  etna::Image &getSSAOimage() { return ssaoImage; }
 
 private:
   Gbuffer gBuffer;
   HDRresources hdrResources;
+
+  etna::Image ssaoImage;
 
 };

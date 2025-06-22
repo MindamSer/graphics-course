@@ -32,7 +32,8 @@ layout(binding = 0) uniform sampler2D albedoTex;
 layout(binding = 1) uniform sampler2D normalTex;
 layout(binding = 2) uniform sampler2D metRouTex;
 layout(binding = 3) uniform sampler2D depthTex;
-layout(binding = 4) readonly buffer LightSourcesBuffer
+layout(binding = 4) uniform sampler2D ssaoTex;
+layout(binding = 5) readonly buffer LightSourcesBuffer
 {
     LightSource LightSourcesBuf[];
 };
@@ -103,6 +104,7 @@ void main() {
     fragMetallic = sampledMetRough.r;
     fragRoughness = sampledMetRough.g;
   }
+  float fragSSAO = texture(ssaoTex, surf.texCoord).r;
 
 
   // calculating fragment normal, direction to eye
@@ -170,5 +172,5 @@ void main() {
   vec3 ambientColor = vec3(1.0f, 1.0f, 1.0f);
   float ambientIntensity = 0.1f;
 
-  out_fragColor = vec4(ambientColor * ambientIntensity * fragAlbedo + Lo, 1.0f);
+  out_fragColor = vec4(ambientColor * ambientIntensity * fragAlbedo * fragSSAO + Lo, 1.0f);
 }
