@@ -21,7 +21,9 @@ target_add_shaders(app_renderer
   shaders/terrain.tese
   shaders/terrain.frag
 
-  shaders/ssao.comp
+  shaders/ssao_calculation.vert
+  shaders/ssao_calculation.frag
+  shaders/ssao_blur.comp
 
   shaders/deferred.frag
   shaders/deferred.vert

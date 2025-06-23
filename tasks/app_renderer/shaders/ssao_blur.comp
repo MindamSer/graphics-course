@@ -1,0 +1,42 @@
+#version 460
+
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout(push_constant) uniform params
+{
+  mat4 proj;
+  mat4 view;
+  uvec2 res;
+} pushConstant;
+
+
+layout(binding = 0) uniform sampler2D ssaoTex;
+layout(binding = 1, r32f) uniform image2D blurTex;
+
+
+
+const int blurRadius = 5;
+
+
+
+void main() {
+  ivec2 fragCoord = ivec2(gl_GlobalInvocationID.xy);
+
+  if (fragCoord.x >= pushConstant.res.x || fragCoord.y >= pushConstant.res.y)
+    return;
+
+
+  const float sampleCount = pow(2 * blurRadius + 1, 2);
+  float sampleSum = 0.0f;
+
+  for (int i = -blurRadius; i <= blurRadius; ++i)
+    for (int j = -blurRadius; j <= blurRadius; ++j)
+    {
+      vec2 sampleUV = vec2(fragCoord + ivec2(i, j)) / vec2(pushConstant.res);
+      sampleSum += texture(ssaoTex, sampleUV).r;
+    }
+
+
+  imageStore(blurTex, fragCoord, vec4(sampleSum / sampleCount));
+}

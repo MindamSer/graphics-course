@@ -52,8 +52,8 @@ void WorldRenderer::loadShaders()
     {APP_RENDERER_SHADERS_ROOT "gpu_culling.comp.spv"});
 
   etna::create_program(
-    "ssao_shader",
-    {APP_RENDERER_SHADERS_ROOT "ssao.comp.spv"});
+    "ssao_blur_shader",
+    {APP_RENDERER_SHADERS_ROOT "ssao_blur.comp.spv"});
 
   etna::create_program(
     "tonmap_shader0",
@@ -70,26 +70,41 @@ void WorldRenderer::loadShaders()
 
   etna::create_program(
     "static_mesh",
-    {APP_RENDERER_SHADERS_ROOT "static_mesh.frag.spv",
-     APP_RENDERER_SHADERS_ROOT "static_mesh.vert.spv"});
+    {
+      APP_RENDERER_SHADERS_ROOT "static_mesh.frag.spv",
+      APP_RENDERER_SHADERS_ROOT "static_mesh.vert.spv"
+    });
 
   etna::create_program(
     "terrain_shader",
-    {APP_RENDERER_SHADERS_ROOT "terrain.vert.spv",
-     APP_RENDERER_SHADERS_ROOT "terrain.tesc.spv",
-     APP_RENDERER_SHADERS_ROOT "terrain.tese.spv",
-     APP_RENDERER_SHADERS_ROOT "terrain.frag.spv"});
+    {
+      APP_RENDERER_SHADERS_ROOT "terrain.vert.spv",
+      APP_RENDERER_SHADERS_ROOT "terrain.tesc.spv",
+      APP_RENDERER_SHADERS_ROOT "terrain.tese.spv",
+      APP_RENDERER_SHADERS_ROOT "terrain.frag.spv"
+    });
+
+  etna::create_program(
+    "ssao_calculation_shader",
+    {
+      APP_RENDERER_SHADERS_ROOT "ssao_calculation.vert.spv",
+      APP_RENDERER_SHADERS_ROOT "ssao_calculation.frag.spv"
+    });
 
   etna::create_program(
     "deferred_shader",
-    {APP_RENDERER_SHADERS_ROOT "deferred.vert.spv",
-     APP_RENDERER_SHADERS_ROOT "deferred.frag.spv"});
+    {
+      APP_RENDERER_SHADERS_ROOT "deferred.vert.spv",
+      APP_RENDERER_SHADERS_ROOT "deferred.frag.spv"
+    });
 
 
   etna::create_program(
     "HDR_to_LDR_shader",
-    {APP_RENDERER_SHADERS_ROOT "HDR_to_LDR.vert.spv",
-     APP_RENDERER_SHADERS_ROOT "HDR_to_LDR.frag.spv"});
+    {
+      APP_RENDERER_SHADERS_ROOT "HDR_to_LDR.vert.spv",
+      APP_RENDERER_SHADERS_ROOT "HDR_to_LDR.frag.spv"
+    });
 }
 
 
@@ -107,8 +122,8 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
   cullingPipeline = {};
   cullingPipeline = pipelineManager.createComputePipeline("culling_shader", {});
 
-  ssaoPipline = {};
-  ssaoPipline = pipelineManager.createComputePipeline("ssao_shader", {});
+  ssaoBlurPipeline = {};
+  ssaoBlurPipeline = pipelineManager.createComputePipeline("ssao_blur_shader", {});
 
   tonmap0Pipeline = {};
   tonmap0Pipeline = pipelineManager.createComputePipeline("tonmap_shader0", {});
@@ -175,6 +190,24 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
       .fragmentShaderOutput = fsOutputInfo,
     });
 
+  ssaoCalculationPipeline = {};
+  ssaoCalculationPipeline = pipelineManager.createGraphicsPipeline(
+    "ssao_calculation_shader",
+    etna::GraphicsPipeline::CreateInfo{
+      .rasterizationConfig =
+        vk::PipelineRasterizationStateCreateInfo{
+          .polygonMode = vk::PolygonMode::eFill,
+          .cullMode = vk::CullModeFlagBits::eBack,
+          .frontFace = vk::FrontFace::eCounterClockwise,
+          .lineWidth = 1.f,
+        },
+      .fragmentShaderOutput =
+        {
+          .colorAttachmentFormats = {vk::Format::eR32Sfloat},
+          .depthAttachmentFormat = vk::Format::eD32Sfloat,
+        },
+    });
+
   defferedShadingPipeline = {};
   defferedShadingPipeline = pipelineManager.createGraphicsPipeline(
     "deferred_shader",
@@ -227,7 +260,7 @@ void WorldRenderer::loadScene(std::filesystem::path path)
   auto textures = sceneMgr->getTextures();
 
   auto &gBuffer = resourceMgr->getGbuffer();
-  auto &ssaoImage = resourceMgr->getSSAOimage();
+  auto &ssaoResources = resourceMgr->getSSAOresources();
 
   // creating descroptor set for culling
   {
@@ -256,8 +289,7 @@ void WorldRenderer::loadScene(std::filesystem::path path)
 
     cullingDescSet = etna::create_persistent_descriptor_set(
       etna::get_shader_program("culling_shader").getDescriptorLayoutId(0),
-      bindings,
-      true
+      bindings
     );
   }
 
@@ -295,7 +327,38 @@ void WorldRenderer::loadScene(std::filesystem::path path)
     );
   }
 
-  // creating descroptor set for deferred lighting with bundless textures
+  // creating descroptor sets for ssao
+  {
+    {
+      std::vector<etna::Binding> bindings =
+      {
+        etna::Binding{0, gBuffer.normal.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+        etna::Binding{1, gBuffer.depth.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+        etna::Binding{2, ssaoResources.noiseImage.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+        etna::Binding{3, ssaoResources.kernelPositions.genBinding()},
+      };
+
+      ssaoCalculationDescSet = etna::create_persistent_descriptor_set(
+        etna::get_shader_program("ssao_calculation_shader").getDescriptorLayoutId(0),
+        bindings
+      );
+    }
+
+    {
+      std::vector<etna::Binding> bindings =
+      {
+        etna::Binding{0, ssaoResources.ssaoImage.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+        etna::Binding{1, ssaoResources.bluredSSAOImage.genBinding({}, vk::ImageLayout::eGeneral)},
+      };
+
+      ssaoBlurDescSet = etna::create_persistent_descriptor_set(
+        etna::get_shader_program("ssao_blur_shader").getDescriptorLayoutId(0),
+        bindings
+      );
+    }
+  }
+
+  // creating descroptor set for deferred lighting
   {
     std::vector<etna::Binding> bindings =
     {
@@ -303,15 +366,14 @@ void WorldRenderer::loadScene(std::filesystem::path path)
       etna::Binding{1, gBuffer.normal.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding{2, gBuffer.metRou.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding{3, gBuffer.depth.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-      etna::Binding{4, ssaoImage.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
+      etna::Binding{4, ssaoResources.bluredSSAOImage.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
       etna::Binding{5, sceneMgr->getLightSourcesBuffer().genBinding()},
     };
 
 
     deferredDescSet = etna::create_persistent_descriptor_set(
       etna::get_shader_program("deferred_shader").getDescriptorLayoutId(0),
-      bindings,
-      true
+      bindings
     );
   }
 }
@@ -488,6 +550,7 @@ void WorldRenderer::renderWorld(
   ETNA_PROFILE_GPU(cmd_buf, renderWorld);
 
   auto &gBuffer = resourceMgr->getGbuffer();
+  auto &ssaoResources = resourceMgr->getSSAOresources();
   auto &hdrResources = resourceMgr->getHDRresources();
 
   // draw final scene to screen
@@ -544,6 +607,14 @@ void WorldRenderer::renderWorld(
         vk::AccessFlagBits2::eShaderSampledRead,
         vk::ImageLayout::eShaderReadOnlyOptimal,
         vk::ImageAspectFlagBits::eDepth);
+
+      etna::set_state(
+        cmd_buf,
+        ssaoResources.bluredSSAOImage.get(),
+        vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderSampledRead,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::ImageAspectFlagBits::eColor);
 
       etna::flush_barriers(cmd_buf);
     }
@@ -773,13 +844,22 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf)
 
 void WorldRenderer::computeSSAO(vk::CommandBuffer cmd_buf)
 {
-  etna::Image &ssaoImage = resourceMgr->getSSAOimage();
-  etna::Image &depthImage = resourceMgr->getGbuffer().depth;
+  auto &gBuffer = resourceMgr->getGbuffer();
+  auto &ssaoResources = resourceMgr->getSSAOresources();
 
   {
     etna::set_state(
       cmd_buf,
-      ssaoImage.get(),
+      ssaoResources.ssaoImage.get(),
+      vk::PipelineStageFlagBits2::eClear,
+      vk::AccessFlagBits2::eTransferWrite,
+      vk::ImageLayout::eGeneral,
+      vk::ImageAspectFlagBits::eColor);
+
+
+    etna::set_state(
+      cmd_buf,
+      ssaoResources.bluredSSAOImage.get(),
       vk::PipelineStageFlagBits2::eClear,
       vk::AccessFlagBits2::eTransferWrite,
       vk::ImageLayout::eGeneral,
@@ -789,80 +869,126 @@ void WorldRenderer::computeSSAO(vk::CommandBuffer cmd_buf)
   }
 
   cmd_buf.clearColorImage(
-    ssaoImage.get(), vk::ImageLayout::eGeneral,
+    ssaoResources.ssaoImage.get(), vk::ImageLayout::eGeneral,
     vk::ClearColorValue{1.0f, 0.0f, 0.0f, 0.0f},
     {vk::ImageSubresourceRange{
       .aspectMask = vk::ImageAspectFlagBits::eColor,
       .levelCount = 1,
       .layerCount = 1,
-    }});
+    }}
+  );
 
+  cmd_buf.clearColorImage(
+    ssaoResources.bluredSSAOImage.get(), vk::ImageLayout::eGeneral,
+    vk::ClearColorValue{1.0f, 0.0f, 0.0f, 0.0f},
+    {vk::ImageSubresourceRange{
+      .aspectMask = vk::ImageAspectFlagBits::eColor,
+      .levelCount = 1,
+      .layerCount = 1,
+    }}
+  );
 
   if (enableSSAO)
   {
     {
       etna::set_state(
         cmd_buf,
-        ssaoImage.get(),
-        vk::PipelineStageFlagBits2::eComputeShader,
-        vk::AccessFlagBits2::eShaderStorageWrite,
-        vk::ImageLayout::eGeneral,
+        gBuffer.normal.get(),
+        vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderSampledRead,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
         vk::ImageAspectFlagBits::eColor);
 
       etna::set_state(
         cmd_buf,
-        depthImage.get(),
-        vk::PipelineStageFlagBits2::eComputeShader,
+        gBuffer.depth.get(),
+        vk::PipelineStageFlagBits2::eFragmentShader,
         vk::AccessFlagBits2::eShaderSampledRead,
         vk::ImageLayout::eShaderReadOnlyOptimal,
         vk::ImageAspectFlagBits::eDepth);
 
+      etna::set_state(
+        cmd_buf,
+        ssaoResources.noiseImage.get(),
+        vk::PipelineStageFlagBits2::eFragmentShader,
+        vk::AccessFlagBits2::eShaderSampledRead,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::ImageAspectFlagBits::eColor);
+
       etna::flush_barriers(cmd_buf);
     }
 
-
-    ETNA_PROFILE_GPU(cmd_buf, calculateSSAO);
-
-    auto simpleComputeInfo = etna::get_shader_program("ssao_shader");
-
-    auto set = etna::create_descriptor_set(
-      simpleComputeInfo.getDescriptorLayoutId(0),
-      cmd_buf,
-      {
-        etna::Binding{0, ssaoImage.genBinding({}, vk::ImageLayout::eGeneral)},
-        etna::Binding{1, depthImage.genBinding(quadSampler.get(), vk::ImageLayout::eShaderReadOnlyOptimal)},
-      });
-
-    vk::DescriptorSet vkSet = set.getVkSet();
-
-    cmd_buf.bindPipeline(vk::PipelineBindPoint::eCompute, ssaoPipline.getVkPipeline());
-
-    cmd_buf.bindDescriptorSets(
-      vk::PipelineBindPoint::eCompute, ssaoPipline.getVkPipelineLayout(), 0, 1, &vkSet, 0, nullptr);
-
     ssaoPC = {
-      resolution,
-      renderConstants.proj,
+      .proj = renderConstants.proj,
+      .view = renderConstants.view,
+      .res = resolution,
     };
 
-    cmd_buf.pushConstants(
-      ssaoPipline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(ssaoPC), &ssaoPC);
+    {
+      etna::RenderTargetState renderTargets(
+        cmd_buf,
+        {{0, 0}, {resolution.x, resolution.y}},
+        {
+          {.image = ssaoResources.ssaoImage.get(), .view = ssaoResources.ssaoImage.getView({})},
+        },
+        {.image = mainViewDepth.get(), .view = mainViewDepth.getView({})});
 
-    etna::flush_barriers(cmd_buf);
+      ETNA_PROFILE_GPU(cmd_buf, calculateSSAO);
 
-    cmd_buf.dispatch((resolution.x + 31) / 32, (resolution.y + 31) / 32, 1);
-  }
+      ssaoCalculationDescSet.processBarriers(cmd_buf);
+      vk::DescriptorSet vkSet = ssaoCalculationDescSet.getVkSet();
 
-  {
-    etna::set_state(
-      cmd_buf,
-      ssaoImage.get(),
-      vk::PipelineStageFlagBits2::eFragmentShader,
-      vk::AccessFlagBits2::eShaderSampledRead,
-      vk::ImageLayout::eShaderReadOnlyOptimal,
-      vk::ImageAspectFlagBits::eColor);
+      cmd_buf.bindPipeline(vk::PipelineBindPoint::eGraphics, ssaoCalculationPipeline.getVkPipeline());
 
-    etna::flush_barriers(cmd_buf);
+      cmd_buf.bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, ssaoCalculationPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, nullptr);
+
+      cmd_buf.pushConstants(
+        ssaoCalculationPipeline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(ssaoPC), &ssaoPC);
+
+      etna::flush_barriers(cmd_buf);
+
+      cmd_buf.draw(3, 1, 0, 0);
+    }
+
+    {
+      etna::set_state(
+        cmd_buf,
+        ssaoResources.ssaoImage.get(),
+        vk::PipelineStageFlagBits2::eComputeShader,
+        vk::AccessFlagBits2::eShaderSampledRead,
+        vk::ImageLayout::eShaderReadOnlyOptimal,
+        vk::ImageAspectFlagBits::eColor);
+
+      etna::set_state(
+        cmd_buf,
+        ssaoResources.bluredSSAOImage.get(),
+        vk::PipelineStageFlagBits2::eComputeShader,
+        vk::AccessFlagBits2::eShaderWrite,
+        vk::ImageLayout::eGeneral,
+        vk::ImageAspectFlagBits::eColor);
+
+      etna::flush_barriers(cmd_buf);
+    }
+
+    {
+      ETNA_PROFILE_GPU(cmd_buf, blurSSAO);
+
+      ssaoBlurDescSet.processBarriers(cmd_buf);
+      vk::DescriptorSet vkSet = ssaoBlurDescSet.getVkSet();
+
+      cmd_buf.bindPipeline(vk::PipelineBindPoint::eCompute, ssaoBlurPipeline.getVkPipeline());
+
+      cmd_buf.bindDescriptorSets(
+        vk::PipelineBindPoint::eCompute, ssaoBlurPipeline.getVkPipelineLayout(), 0, 1, &vkSet, 0, nullptr);
+
+      cmd_buf.pushConstants(
+        ssaoBlurPipeline.getVkPipelineLayout(), vk::ShaderStageFlagBits::eCompute, 0, sizeof(ssaoPC), &ssaoPC);
+
+      etna::flush_barriers(cmd_buf);
+
+      cmd_buf.dispatch((resolution.x + 31) / 32, (resolution.y + 31) / 32, 1);
+    }
   }
 }
 

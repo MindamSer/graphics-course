@@ -3,6 +3,7 @@
 #include <etna/Image.hpp>
 #include <etna/Sampler.hpp>
 #include <etna/Buffer.hpp>
+#include <etna/BlockingTransferHelper.hpp>
 #include <glm/ext.hpp>
 
 
@@ -12,6 +13,14 @@ struct Gbuffer
   etna::Image normal;
   etna::Image metRou;
   etna::Image depth;
+};
+
+struct SSAOresources
+{
+  etna::Buffer kernelPositions;
+  etna::Image noiseImage;
+  etna::Image ssaoImage;
+  etna::Image bluredSSAOImage;
 };
 
 struct HDRresources
@@ -30,13 +39,15 @@ public:
   void allocateResources(glm::uvec2 swapchain_resolution);
 
   Gbuffer &getGbuffer() { return gBuffer; }
+  SSAOresources &getSSAOresources() { return ssaoResources; }
   HDRresources &getHDRresources() { return hdrResources; }
-  etna::Image &getSSAOimage() { return ssaoImage; }
 
 private:
-  Gbuffer gBuffer;
-  HDRresources hdrResources;
+  std::unique_ptr<etna::OneShotCmdMgr> oneShotCommands;
+  etna::BlockingTransferHelper transferHelper;
 
-  etna::Image ssaoImage;
+  Gbuffer gBuffer;
+  SSAOresources ssaoResources;
+  HDRresources hdrResources;
 
 };

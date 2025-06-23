@@ -65,7 +65,10 @@ private:
 
   etna::GraphicsPipeline terrainPipeline;
 
-  etna::ComputePipeline ssaoPipline;
+  etna::GraphicsPipeline ssaoCalculationPipeline;
+  etna::ComputePipeline ssaoBlurPipeline;
+  etna::PersistentDescriptorSet ssaoCalculationDescSet;
+  etna::PersistentDescriptorSet ssaoBlurDescSet;
 
   etna::GraphicsPipeline defferedShadingPipeline;
   etna::PersistentDescriptorSet deferredDescSet;
@@ -108,8 +111,9 @@ private:
 
   struct SSAOPushConstants
   {
+    glm::mat4x4 proj;
+    glm::mat4x4 view;
     glm::uvec2 res;
-    glm::mat4 proj;
   } ssaoPC;
 
   struct DeferredPushConstants

@@ -2,16 +2,6 @@
 #extension GL_KHR_vulkan_glsl : enable
 
 
-struct Material
-{
-  vec4 baseColorFactor;
-  vec4 metalRougFactor;
-  int albedoTexIndex;
-  int metRouTexIndex;
-  int normalTexIndex;
-  int _padding;
-};
-
 struct LightSource
 {
   vec4 pos;

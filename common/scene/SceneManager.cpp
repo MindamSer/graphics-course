@@ -672,7 +672,7 @@ void SceneManager::createHieghtMap()
     .extent = vk::Extent3D{4096, 4096, 1},
     .name = "terrainHeightMap",
     .format = vk::Format::eR32Sfloat,
-    .imageUsage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage});\
+    .imageUsage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled});
 
   hieghtMapSampler = etna::Sampler(etna::Sampler::CreateInfo{
     .addressMode = vk::SamplerAddressMode::eMirroredRepeat, .name = "hieghtMapSampler"});
