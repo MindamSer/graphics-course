@@ -22,54 +22,56 @@ layout (location = 0 ) out VS_OUT
 } vOut;
 
 
+
+const int tilePerSide = 64;
+const int tilePerTextureSide = 1;
+const float tileSize = 32.0f;
+const float terrainHeight = 50.0f;
+const float textureSize = 4096.0f;
+
 float H(vec2 coord)
 {
-	return textureLod(colorTex, coord, 0).r * 100.0f;
+	return texture(colorTex, coord).r * terrainHeight;
 }
 
-vec3 getNorm(vec2 coord, float scale)
+vec3 getNorm(vec2 coord)
 {
-	float h = scale / 2048.;
+	float h = 1.0f / textureSize;
 
-	float du_x = (H(coord + vec2(h, 0.)) - H(coord - vec2(h, 0.))) / (2 * 0.5);
-	float du_y = (H(coord + vec2(0., h)) - H(coord - vec2(0., h))) / (2 * 0.5);
+  float dhdx = (H(coord + vec2(h, 0.0f)) - H(coord - vec2(h, 0.0f))) / (2.0f * h);
+	float dhdy = (H(coord + vec2(0.0f, h)) - H(coord - vec2(0.0f, h))) / (2.0f * h);
 
-	return normalize(vec3(du_x, du_y, 1));
+	return normalize(vec3(-dhdx / tileSize, 1.0f, -dhdy / tileSize));
 }
 
 
 
 void main()
 {
-  int tileCount = 64;
-  float tileSize = 16.;
-  float hmScale = 8.;
-
-
   float u = gl_TessCoord.x;
   float v = gl_TessCoord.y;
 
-  vec4 pos0 = gl_in[0].gl_Position;
-  vec4 pos1 = gl_in[1].gl_Position;
-  vec4 pos2 = gl_in[2].gl_Position;
-  vec4 pos3 = gl_in[3].gl_Position;
+  vec2 pos0 = gl_in[0].gl_Position.xz;
+  vec2 pos1 = gl_in[1].gl_Position.xz;
+  vec2 pos2 = gl_in[2].gl_Position.xz;
+  vec2 pos3 = gl_in[3].gl_Position.xz;
 
-  vec4 leftPos = pos0 + v * (pos3 - pos0);
-  vec4 rightPos = pos1 + v * (pos2 - pos1);
+  vec2 leftPos = pos0 + v * (pos3 - pos0);
+  vec2 rightPos = pos1 + v * (pos2 - pos1);
 
-  vec4 pos = leftPos + u * (rightPos - leftPos);
-
-
-  pos.xz *= tileSize;
-  pos.xz += tileSize * (ivec2(floor(pushConstant.cameraPos.xz / tileSize + 0.5)));
+  vec2 gridTerrainCenter = floor(pushConstant.cameraPos.xz / tileSize + 0.5);
+  vec2 gridPosition = leftPos + u * (rightPos - leftPos);
 
 
-  vec2 hmCoord = hmScale * (pos.xz) / (tileCount * tileSize) + 0.5;
-  pos.y = H(hmCoord);
+  vec4 worldPosition = vec4(1.0f);
+  worldPosition.xz = (gridTerrainCenter + gridPosition) * tileSize;
+
+  vec2 hmCoord = worldPosition.xz / (tilePerTextureSide * tileSize);
+  worldPosition.y = H(hmCoord);
 
 
-  vOut.pos = pos.xyz;
-  vOut.norm = getNorm(hmCoord, hmScale).xzy;
+  vOut.pos = worldPosition.xyz;
+  vOut.norm = getNorm(hmCoord);
 
-  gl_Position = pushConstant.mProjView * pos;
+  gl_Position = pushConstant.mProjView * worldPosition;
 }

@@ -7,37 +7,42 @@ layout(vertices = 4) out;
 
 
 
+const int maxDivisions = 64;
+const int lowerDivEvery = 3;
+
+
+
 void main()
 {
   if(gl_InvocationID == 0)
   {
   	vec2 maxPoint = max(
-  	max(gl_in[0].gl_Position.xz,gl_in[1].gl_Position.xz),
-  	max(gl_in[2].gl_Position.xz,gl_in[3].gl_Position.xz));
+  	  max(gl_in[0].gl_Position.xz, gl_in[1].gl_Position.xz),
+  	  max(gl_in[2].gl_Position.xz, gl_in[3].gl_Position.xz)
+    );
   	vec2 minPoint = min(
-  	min(gl_in[0].gl_Position.xz,gl_in[1].gl_Position.xz),
-  	min(gl_in[2].gl_Position.xz,gl_in[3].gl_Position.xz));
+  	  min(gl_in[0].gl_Position.xz, gl_in[1].gl_Position.xz),
+  	  min(gl_in[2].gl_Position.xz, gl_in[3].gl_Position.xz)
+    );
     vec2 centPoint = (maxPoint + minPoint) / 2;
 
   	vec2 farPoint = max(abs(maxPoint), abs(minPoint));
   	float maxDist = max(farPoint.x, farPoint.y);
 
 
-
   	int k = 1;
-  	while(maxDist > 3. && k < 64)
+  	while(maxDist > lowerDivEvery && k < maxDivisions)
   	{
-  	  maxDist -= 3.;
+  	  maxDist -= lowerDivEvery;
   	  k *= 2;
   	}
 
-  	gl_TessLevelOuter[0] = 64 / k;
-  	gl_TessLevelOuter[1] = 64 / k;
-  	gl_TessLevelOuter[2] = 64 / k;
-  	gl_TessLevelOuter[3] = 64 / k;
-  	gl_TessLevelInner[0] = 64 / k;
-  	gl_TessLevelInner[1] = 64 / k;
-
+  	gl_TessLevelOuter[0] = maxDivisions / k;
+  	gl_TessLevelOuter[1] = maxDivisions / k;
+  	gl_TessLevelOuter[2] = maxDivisions / k;
+  	gl_TessLevelOuter[3] = maxDivisions / k;
+  	gl_TessLevelInner[0] = maxDivisions / k;
+  	gl_TessLevelInner[1] = maxDivisions / k;
 
 
     if (
