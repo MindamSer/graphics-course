@@ -408,6 +408,8 @@ void WorldRenderer::drawGui()
 
   auto *drawCmd = ImGui::GetForegroundDrawList();
 
+  ImGui::Checkbox("Render scene", &scene);
+  ImGui::Checkbox("Render terrain", &terrain);
   ImGui::Checkbox("Enable SSAO", &enableSSAO);
   ImGui::Checkbox("Show bounding boxes", &drawBoundingBoxes);
   ImGui::Checkbox("Show lights", &drawLights);
@@ -568,9 +570,11 @@ void WorldRenderer::renderWorld(
         },
         {.image = gBuffer.depth.get(), .view = gBuffer.depth.getView({})});
 
-      renderScene(cmd_buf);
+      if (scene)
+        renderScene(cmd_buf);
 
-      renderTerrain(cmd_buf);
+      if (terrain)
+        renderTerrain(cmd_buf);
     }
 
     computeSSAO(cmd_buf);
@@ -844,6 +848,8 @@ void WorldRenderer::renderTerrain(vk::CommandBuffer cmd_buf)
 
 void WorldRenderer::computeSSAO(vk::CommandBuffer cmd_buf)
 {
+  ETNA_PROFILE_GPU(cmd_buf, SSAO);
+
   auto &gBuffer = resourceMgr->getGbuffer();
   auto &ssaoResources = resourceMgr->getSSAOresources();
 
@@ -1021,7 +1027,7 @@ void WorldRenderer::deferredShading(vk::CommandBuffer cmd_buf)
 void WorldRenderer::postProcess(
   vk::CommandBuffer cmd_buf)
 {
-  ETNA_PROFILE_GPU(cmd_buf, computePass);
+  ETNA_PROFILE_GPU(cmd_buf, postProcess);
 
   auto &hdrResources = resourceMgr->getHDRresources();
 

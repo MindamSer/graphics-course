@@ -49,6 +49,9 @@ private:
 
   bool drawBoundingBoxes = false;
   bool drawLights = false;
+
+  bool scene = true;
+  bool terrain = false;
   bool enableSSAO = true;
 
 
