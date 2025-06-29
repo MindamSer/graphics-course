@@ -220,7 +220,23 @@ void WorldRenderer::setupPipelines(vk::Format swapchain_format)
           .frontFace = vk::FrontFace::eCounterClockwise,
           .lineWidth = 1.f,
         },
-      .blendingConfig = blendingInfo,
+      .blendingConfig = {
+        .attachments =
+          {{.blendEnable = vk::True,
+                .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+                .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+                .colorBlendOp        = vk::BlendOp::eAdd,
+                .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+                .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+                .alphaBlendOp        = vk::BlendOp::eAdd,
+                .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                              vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,},
+           {.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                              vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,},
+           {.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                              vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,}},
+        .logicOp = {},
+      },
       .fragmentShaderOutput = fsOutputInfo,
     });
 
@@ -1049,7 +1065,7 @@ void WorldRenderer::updateParticles(vk::CommandBuffer cmd_buf)
 
   etna::flush_barriers(cmd_buf);
 
-  cmd_buf.dispatch((renderConstants.emittersCount + 15) / 16, 1, 1);
+  cmd_buf.dispatch((renderConstants.emittersCount + 3) / 4, 1, 1);
 
   {
     std::vector<vk::BufferMemoryBarrier2> barriers;

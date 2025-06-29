@@ -15,6 +15,7 @@ layout (location = 0 ) in VS_OUT
 
 layout(location = 0) out vec4 out_fragColor;
 layout(location = 1) out vec4 out_normal;
+layout(location = 2) out vec4 out_metRou;
 
 
 

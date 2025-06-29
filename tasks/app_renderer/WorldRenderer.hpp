@@ -55,7 +55,7 @@ private:
   bool enableScene = true;
   bool enableTerrain = false;
   bool enableParticles = true;
-  bool enableSSAO = true;
+  bool enableSSAO = false;
 
   bool drawBoundingBoxes = false;
   bool drawLights = false;

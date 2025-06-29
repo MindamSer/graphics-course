@@ -46,7 +46,7 @@ struct VkDrawIndirectCommand
 };
 
 
-layout(local_size_x = 16, local_size_x = 256) in;
+layout(local_size_x = 4, local_size_y = 256) in;
 
 layout(push_constant) uniform params
 {

@@ -786,7 +786,7 @@ void SceneManager::createParticleElements()
       particleTextures.push_back(etna::get_context().createImage(etna::Image::CreateInfo{
         .extent = vk::Extent3D{static_cast<unsigned>(width), static_cast<unsigned>(height), 1},
         .name = std::format("particle%d", i),
-        .format = vk::Format::eR8G8B8A8Unorm,
+        .format = vk::Format::eR8G8B8A8Srgb,
         .imageUsage = vk::ImageUsageFlagBits::eSampled |
                       vk::ImageUsageFlagBits::eTransferDst,
       }));
