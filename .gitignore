@@ -5,5 +5,7 @@ external
 .vs
 .cache
 .vscode
+.clangd
 CMakeSettings.json
 CMakeUserPresets.json
+imgui.ini

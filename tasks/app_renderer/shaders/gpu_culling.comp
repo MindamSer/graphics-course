@@ -1,0 +1,140 @@
+#version 460
+
+
+struct RenderElement
+{
+  uint vertexOffset;
+  uint indexOffset;
+  uint indexCount;
+  int materialIndex;
+};
+
+struct RelemBoundingBox
+{
+  vec4 max_pos;
+  vec4 min_pos;
+};
+
+struct Mesh
+{
+  uint firstRelem;
+  uint relemCount;
+};
+
+struct VkDrawIndexedIndirectCommand
+{
+  uint indexCount;
+  uint instanceCount;
+  uint firstIndex;
+  int  vertexOffset;
+  uint firstInstance;
+};
+
+
+layout(local_size_x = 256) in;
+
+layout(push_constant) uniform params
+{
+  mat4 mProjView;
+  uint instanceCount;
+  uint relemCount;
+} pushConstant;
+
+
+layout(binding = 0) readonly buffer InstanceMatricesBuffer
+{
+    mat4x4 instanceMatrices[];
+};
+layout(binding = 1) readonly buffer InstanceMeshesIndiciesBuffer
+{
+    uint meshesIndicies[];
+};
+layout(binding = 2) readonly buffer MeshesBuffer
+{
+    Mesh meshes[];
+};
+layout(binding = 3) readonly buffer RenderElementsBuffer
+{
+    RenderElement renderElements[];
+};
+layout(binding = 4) readonly buffer RelemBoundingBoxesBuffer
+{
+    RelemBoundingBox relemBoundingBoxes[];
+};
+
+layout(binding = 5) buffer DrawCommandsBuffer
+{
+    VkDrawIndexedIndirectCommand drawCommands[];
+};
+layout(binding = 6) buffer DrawMatricesIndiciesBuffer
+{
+    uint drawMatricesIndicies[];
+};
+
+
+
+void main() {
+    uint instanseIndex = gl_GlobalInvocationID.x;
+
+    if (instanseIndex >= pushConstant.instanceCount)
+        return;
+
+    if (instanseIndex == 0)
+    {
+        for(uint i = 0; i < pushConstant.relemCount; ++i)
+        {
+            drawCommands[i].instanceCount = 0;
+        }
+    }
+    barrier();
+
+    Mesh instanceMesh = meshes[meshesIndicies[instanseIndex]];
+
+    for (uint relemInMeshIndex = 0; relemInMeshIndex < instanceMesh.relemCount; ++relemInMeshIndex)
+    {
+        uint relemIndex = instanceMesh.firstRelem + relemInMeshIndex;
+
+        RelemBoundingBox relemBoundingBox = relemBoundingBoxes[relemIndex];
+
+        vec4 boxVertices[8] =
+        {
+            vec4(relemBoundingBox.min_pos.x, relemBoundingBox.min_pos.y, relemBoundingBox.min_pos.z, 1.0f),
+            vec4(relemBoundingBox.max_pos.x, relemBoundingBox.min_pos.y, relemBoundingBox.min_pos.z, 1.0f),
+            vec4(relemBoundingBox.min_pos.x, relemBoundingBox.max_pos.y, relemBoundingBox.min_pos.z, 1.0f),
+            vec4(relemBoundingBox.max_pos.x, relemBoundingBox.max_pos.y, relemBoundingBox.min_pos.z, 1.0f),
+            vec4(relemBoundingBox.min_pos.x, relemBoundingBox.min_pos.y, relemBoundingBox.max_pos.z, 1.0f),
+            vec4(relemBoundingBox.max_pos.x, relemBoundingBox.min_pos.y, relemBoundingBox.max_pos.z, 1.0f),
+            vec4(relemBoundingBox.min_pos.x, relemBoundingBox.max_pos.y, relemBoundingBox.max_pos.z, 1.0f),
+            vec4(relemBoundingBox.max_pos.x, relemBoundingBox.max_pos.y, relemBoundingBox.max_pos.z, 1.0f),
+        };
+
+        bool allBehindPlane[6] =
+        {
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+        };
+
+        for (int i = 0; i < 8; ++i)
+        {
+            boxVertices[i] = pushConstant.mProjView * instanceMatrices[instanseIndex] * boxVertices[i];
+            boxVertices[i] /= boxVertices[i].w;
+
+            allBehindPlane[0] = allBehindPlane[0] && (boxVertices[i].x >  1.5f);
+            allBehindPlane[1] = allBehindPlane[1] && (boxVertices[i].x < -1.5f);
+            allBehindPlane[2] = allBehindPlane[2] && (boxVertices[i].y >  1.5f);
+            allBehindPlane[3] = allBehindPlane[3] && (boxVertices[i].y < -1.5f);
+            allBehindPlane[4] = allBehindPlane[4] && (boxVertices[i].z >  1.5f);
+            allBehindPlane[5] = allBehindPlane[5] && (boxVertices[i].z < -0.5f);
+        }
+
+        if (!(allBehindPlane[0] || allBehindPlane[1] || allBehindPlane[2] || allBehindPlane[3] || allBehindPlane[4] || allBehindPlane[5]))
+        {
+            uint curMatrixIndex = atomicAdd(drawCommands[relemIndex].instanceCount, 1);
+            drawMatricesIndicies[drawCommands[relemIndex].firstInstance + curMatrixIndex] = instanseIndex;
+        }
+    }
+}
