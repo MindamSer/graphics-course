@@ -153,9 +153,10 @@ void main()
     memoryBarrierShared();
     barrier();
 
-    // fructum culling particles
+
     if (particleIndex < emittersRuntimes[emitterIndex].particleCount)
     {
+        // fructum culling particles
         vec4 particleScreenPosition = vec4(particlesBuffers[emitterIndex].v[particleIndex].position.xyz, 1.0f);
         particleScreenPosition = pushConstant.projView * particleScreenPosition;
         particleScreenPosition /= particleScreenPosition.w;
@@ -169,22 +170,51 @@ void main()
 
         if (visible)
         {
-            uint curParticlePosition = atomicAdd(visibleParticlesCount[localEmitterIndex], 1);
-            particlesOrderBuffers[localEmitterIndex].v[curParticlePosition] = particleIndex;
+            uint curParticleArrayPosition = atomicAdd(visibleParticlesCount[localEmitterIndex], 1);
+            particlesOrderBuffers[emitterIndex].v[curParticleArrayPosition] = particleIndex;
         }
     }
-    memoryBarrierShared();
-    barrier();
+
 
     // sorting visible particles
+    uint particlesToSortNumber = visibleParticlesCount[localEmitterIndex];
+    if (particleIndex < particlesToSortNumber)
     {
-
+        for (uint i = 0; i < particlesToSortNumber; ++i)
+        {
+            if ((particleIndex % 2) == (i % 2) && particleIndex != (particlesToSortNumber - 1))
+            {
+                if (length(particlesBuffers[emitterIndex].v[particlesOrderBuffers[emitterIndex].v[particleIndex]].position.xyz - pushConstant.cameraPos.xyz)
+                    < length(particlesBuffers[emitterIndex].v[particlesOrderBuffers[emitterIndex].v[particleIndex + 1]].position.xyz - pushConstant.cameraPos.xyz))
+                {
+                    uint t = particlesOrderBuffers[emitterIndex].v[particleIndex];
+                    particlesOrderBuffers[emitterIndex].v[particleIndex] = particlesOrderBuffers[emitterIndex].v[particleIndex + 1];
+                    particlesOrderBuffers[emitterIndex].v[particleIndex + 1] = t;
+                }
+            }
+            barrier();
+        }
     }
 
     // sorting emitters
+    if (particleIndex == 0)
     {
-
+        for (uint i = 0; i < pushConstant.emittersCount; ++i)
+        {
+            if ((emitterIndex % 2) == (i % 2) && emitterIndex != (pushConstant.emittersCount - 1))
+            {
+                if (length(emitters[emittersOrder[emitterIndex]].position.xyz - pushConstant.cameraPos.xyz)
+                    < length(emitters[emittersOrder[emitterIndex + 1]].position.xyz - pushConstant.cameraPos.xyz))
+                {
+                    uint t = emittersOrder[emitterIndex];
+                    emittersOrder[emitterIndex] = emittersOrder[emitterIndex + 1];
+                    emittersOrder[emitterIndex + 1] = t;
+                }
+            }
+            barrier();
+        }
     }
+
 
     // filling indirect command buffer
     if (particleIndex == 0)
