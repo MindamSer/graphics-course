@@ -8,6 +8,7 @@
 #include "etna/DescriptorSet.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <chrono>
 
 #include "scene/SceneManager.hpp"
 #include "wsi/Keyboard.hpp"
@@ -36,28 +37,35 @@ public:
 
 private:
   void cullScene(vk::CommandBuffer cmd_buf);
+  void updateParticles(vk::CommandBuffer cmd_buf);
   void renderScene(vk::CommandBuffer cmd_buf);
   void renderTerrain(vk::CommandBuffer cmd_buf);
+  void renderParticles(vk::CommandBuffer cmd_buf);
   void computeSSAO(vk::CommandBuffer cmd_buf);
   void deferredShading(vk::CommandBuffer cmd_buf);
   void postProcess(vk::CommandBuffer cmd_buf);
   void copyHDRtoLDR(vk::CommandBuffer cmd_buf);
 
+  float getDeltaTime();
+
 private:
   std::unique_ptr<SceneManager> sceneMgr;
   std::unique_ptr<ResourceManager> resourceMgr;
 
+  bool enableScene = true;
+  bool enableTerrain = false;
+  bool enableParticles = true;
+  bool enableSSAO = true;
+
   bool drawBoundingBoxes = false;
   bool drawLights = false;
-
-  bool scene = true;
-  bool terrain = false;
-  bool enableSSAO = true;
+  bool drawEmitters = false;
 
 
   glm::uvec2 resolution;
   etna::Image mainViewDepth;
   etna::Sampler quadSampler;
+  std::chrono::system_clock::time_point lastTime;
 
 
   etna::ComputePipeline cullingPipeline;
@@ -67,6 +75,11 @@ private:
   etna::PersistentDescriptorSet staticMeshDescSet;
 
   etna::GraphicsPipeline terrainPipeline;
+
+  etna::ComputePipeline particlesUpdatePipeline;
+  etna::GraphicsPipeline particlesDrawPipeline;
+  etna::PersistentDescriptorSet particlesUpdateDescSet;
+  etna::PersistentDescriptorSet particlesDrawDescSet;
 
   etna::GraphicsPipeline ssaoCalculationPipeline;
   etna::ComputePipeline ssaoBlurPipeline;
@@ -91,6 +104,7 @@ private:
     std::uint32_t instanceCount;
     std::uint32_t relemCount;
     std::uint32_t lightsCount;
+    std::uint32_t emittersCount;
     glm::vec3 cameraPos;
   } renderConstants;
 
@@ -111,6 +125,14 @@ private:
     glm::mat4x4 projView;
     glm::vec3 cameraPos;
   } terrainPC;
+
+  struct ParticlesPushConstants
+  {
+    glm::mat4x4 projView;
+    glm::vec4 cameraPos;
+    std::uint32_t emittersCount;
+    float dt;
+  } particlesPC;
 
   struct SSAOPushConstants
   {

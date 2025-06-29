@@ -1,0 +1,192 @@
+#version 460
+
+
+struct ParticleEmitter
+{
+    vec4 position;
+    vec4 initialVelocity;
+    vec4 particleColor;
+
+    uint textureId;
+    float particleScale;
+    float particleGravityK;
+    float particleLifetime;
+
+    float spawnFreq;
+
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
+};
+
+struct ParticleEmitterRuntime
+{
+    uint particleCount;
+    float cooldown;
+};
+
+struct Particle
+{
+    vec4 position;
+    vec4 velocity;
+    vec4 color;
+
+    uint textureId;
+    float textureScale;
+    float gravityScale;
+    float lifetime;
+};
+
+struct VkDrawIndirectCommand
+{
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+
+
+layout(local_size_x = 16, local_size_x = 256) in;
+
+layout(push_constant) uniform params
+{
+    mat4x4 projView;
+    vec4 cameraPos;
+    uint emittersCount;
+    float dt;
+} pushConstant;
+
+
+layout(binding = 0) readonly buffer EmittersBuffer
+{
+    ParticleEmitter emitters[];
+};
+layout(binding = 1) buffer EmittersRuntimesBuffer
+{
+    ParticleEmitterRuntime emittersRuntimes[];
+};
+layout(binding = 2) buffer EmittersOrderBuffer
+{
+    uint emittersOrder[];
+};
+
+layout(binding = 3) buffer DrawCommandsBuffer
+{
+    VkDrawIndirectCommand drawCommands[];
+};
+
+layout(binding = 4) buffer ParticlesBuffersBuffer
+{
+    Particle v[256];
+} particlesBuffers[32];
+layout(binding = 5) buffer ParticlesOrderBuffersBuffer
+{
+    uint v[256];
+} particlesOrderBuffers[32];
+
+
+
+const float G = -9.81f;
+shared uint visibleParticlesCount[16];
+
+
+
+void main()
+{
+    uint emitterIndex = gl_GlobalInvocationID.x;
+
+    // leaving only 256 threads per existing emitter
+    if (emitterIndex >= pushConstant.emittersCount)
+        return;
+
+    uint localEmitterIndex = gl_LocalInvocationID.x;
+    uint particleIndex = gl_GlobalInvocationID.y;
+
+    // updating physics
+    if (particleIndex < emittersRuntimes[emitterIndex].particleCount)
+    {
+        particlesBuffers[emitterIndex].v[particleIndex].lifetime -= pushConstant.dt;
+        particlesBuffers[emitterIndex].v[particleIndex].velocity.y += G * particlesBuffers[emitterIndex].v[particleIndex].gravityScale * pushConstant.dt;
+        particlesBuffers[emitterIndex].v[particleIndex].position += particlesBuffers[emitterIndex].v[particleIndex].velocity * pushConstant.dt;
+    }
+
+    // deleting dead and spawning new particles
+    if (particleIndex == 0)
+    {
+        ParticleEmitter emitter = emitters[emitterIndex];
+
+        emittersRuntimes[emitterIndex].cooldown -= pushConstant.dt;
+
+        if (emittersRuntimes[emitterIndex].cooldown <= 0.0f && emittersRuntimes[emitterIndex].particleCount < 256)
+        {
+            emittersRuntimes[emitterIndex].cooldown = 1.0f / emitter.spawnFreq;
+            particlesBuffers[emitterIndex].v[emittersRuntimes[emitterIndex].particleCount] = Particle(
+                emitter.position,
+                emitter.initialVelocity,
+                emitter.particleColor,
+                emitter.textureId,
+                emitter.particleScale,
+                emitter.particleGravityK,
+                emitter.particleLifetime
+            );
+            ++emittersRuntimes[emitterIndex].particleCount;
+        }
+
+        for (uint i = 1; i < emittersRuntimes[emitterIndex].particleCount; ++i)
+            if (particlesBuffers[emitterIndex].v[i].lifetime <= 0.0f)
+            {
+                particlesBuffers[emitterIndex].v[i] = particlesBuffers[emitterIndex].v[emittersRuntimes[emitterIndex].particleCount - 1];
+                --emittersRuntimes[emitterIndex].particleCount;
+                --i;
+            }
+        if (particlesBuffers[emitterIndex].v[0].lifetime <= 0.0f)
+        {
+            particlesBuffers[emitterIndex].v[0] = particlesBuffers[emitterIndex].v[emittersRuntimes[emitterIndex].particleCount - 1];
+            --emittersRuntimes[emitterIndex].particleCount;
+        }
+
+        // initializing for culling
+        visibleParticlesCount[emitterIndex] = 0;
+        // initializing for emitters sort
+        emittersOrder[emitterIndex] = emitterIndex;
+    }
+    memoryBarrierShared();
+    barrier();
+
+    // fructum culling particles
+    if (particleIndex < emittersRuntimes[emitterIndex].particleCount)
+    {
+        vec4 particleScreenPosition = vec4(particlesBuffers[emitterIndex].v[particleIndex].position.xyz, 1.0f);
+        particleScreenPosition = pushConstant.projView * particleScreenPosition;
+        particleScreenPosition /= particleScreenPosition.w;
+
+        bool visible = particleScreenPosition.x <  1.2f
+                    && particleScreenPosition.x > -1.2f
+                    && particleScreenPosition.y <  1.2f
+                    && particleScreenPosition.y > -1.2f
+                    && particleScreenPosition.z <  1.0f
+                    && particleScreenPosition.z >  0.0f;
+
+        if (visible)
+        {
+            uint curParticlePosition = atomicAdd(visibleParticlesCount[localEmitterIndex], 1);
+            particlesOrderBuffers[localEmitterIndex].v[curParticlePosition] = particleIndex;
+        }
+    }
+    memoryBarrierShared();
+    barrier();
+
+    // sorting visible particles
+    {
+
+    }
+
+    // sorting emitters
+    {
+
+    }
+
+    // filling indirect command buffer
+    if (particleIndex == 0)
+        drawCommands[emitterIndex].instanceCount = visibleParticlesCount[localEmitterIndex];
+}

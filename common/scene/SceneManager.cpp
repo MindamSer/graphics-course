@@ -10,8 +10,11 @@
 #include <glm/gtc/quaternion.hpp>
 #include <etna/GlobalContext.hpp>
 #include <etna/OneShotCmdMgr.hpp>
-#include "etna/Image.hpp"
+#include <etna/Image.hpp>
+
+#include "Particles.hpp"
 #include "perlin_noise.hpp"
+#include "stb_image.h"
 
 
 static std::uint32_t encode_normal(glm::vec3 normal)
@@ -476,6 +479,8 @@ void SceneManager::selectScene(std::filesystem::path path)
   createHieghtMap();
 
   createLightSources();
+
+  createParticleElements();
 }
 
 void SceneManager::loadMaterials(const tinygltf::Model& model)
@@ -754,6 +759,139 @@ void SceneManager::createLightSources()
   transferHelper.uploadBuffer<LightSource>(*oneShotCommands, lightSourcesBuffer, 0, lights);
 
   lightsBufferPtr = lightSourcesBuffer.map();
+}
+
+void SceneManager::createParticleElements()
+{
+  {
+    std::vector<std::string> textureToLoad = {
+      GRAPHICS_COURSE_RESOURCES_ROOT "/particles/circle_01.png",
+      GRAPHICS_COURSE_RESOURCES_ROOT "/particles/fire_01.png",
+      GRAPHICS_COURSE_RESOURCES_ROOT "/particles/flare_01.png",
+      GRAPHICS_COURSE_RESOURCES_ROOT "/particles/light_01.png",
+      GRAPHICS_COURSE_RESOURCES_ROOT "/particles/magic_04.png",
+      GRAPHICS_COURSE_RESOURCES_ROOT "/particles/star_09.png",
+    };
+
+    particleTextures.reserve(textureToLoad.size());
+
+    int width, height, channels;
+    for (uint32_t i = 0; i < textureToLoad.size(); ++i)
+    {
+      const auto &fileName = textureToLoad[i];
+
+      unsigned char* imageData = stbi_load(
+        fileName.c_str(), &width, &height, &channels, 4);
+
+      particleTextures.push_back(etna::get_context().createImage(etna::Image::CreateInfo{
+        .extent = vk::Extent3D{static_cast<unsigned>(width), static_cast<unsigned>(height), 1},
+        .name = std::format("particle%d", i),
+        .format = vk::Format::eR8G8B8A8Unorm,
+        .imageUsage = vk::ImageUsageFlagBits::eSampled |
+                      vk::ImageUsageFlagBits::eTransferDst,
+      }));
+
+      transferHelper.uploadImage(*oneShotCommands, particleTextures.back(), 0, 0,
+          std::span<const std::byte>(reinterpret_cast<const std::byte*>(imageData), width * height * 4));
+
+      stbi_image_free(imageData);
+    }
+  }
+
+  {
+    emitters = {
+      ParticleEmitter{
+        .position = {1.0f, 1.0f, -2.0f, 1.0f},
+        .initialVelocity = {2.0f, 2.0f, 0.0f, 1.0f},
+        .particleColor = {0.f, 1.f, 1.f, 1.f},
+      },
+      ParticleEmitter{
+        .position = {0.0f, 1.0f, -2.0f, 1.0f},
+        .initialVelocity = {0.0f, 2.0f, 0.0f, 1.0f},
+        .particleColor = {1.f, 0.f, 1.f, 1.f},
+      },
+      ParticleEmitter{
+        .position = {-1.0f, 1.0f, -2.0f, 1.0f},
+        .initialVelocity = {-2.0f, 2.0f, 0.0f, 1.0f},
+        .particleColor = {1.f, 1.f, 0.f, 1.f},
+      },
+    };
+
+    std::vector<ParticleEmitterRuntime> clearRuntime(emitters.size());
+
+    particlesBuffers = {
+      .emittersBuffer = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+        .size = emitters.size() * sizeof(ParticleEmitter),
+        .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+        .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+        .name = "emittersBuffer",
+      }),
+      .emittersRuntimeBuffer = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+        .size = emitters.size() * sizeof(ParticleEmitterRuntime),
+        .bufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+        .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .name = "emittersRuntimeBuffer",
+      }),
+      .emittersOrderBuffer = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+        .size = emitters.size() * sizeof(uint32_t),
+        .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
+        .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .name = "emittersOrderBuffer",
+      }),
+      .particlesBuffers = {},
+      .particlesOrderBuffers = {},
+      .drawCommands = etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+        .size = renderElements.size() * sizeof(VkDrawIndirectCommand),
+        .bufferUsage = vk::BufferUsageFlagBits::eIndirectBuffer |
+                      vk::BufferUsageFlagBits::eTransferDst |
+                      vk::BufferUsageFlagBits::eStorageBuffer,
+        .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+        .name = "particlesDrawCommandsBuffer",
+      }),
+    };
+
+    transferHelper.uploadBuffer<ParticleEmitter>(
+      *oneShotCommands, particlesBuffers.emittersBuffer, 0, emitters);
+    transferHelper.uploadBuffer<ParticleEmitterRuntime>(
+      *oneShotCommands, particlesBuffers.emittersRuntimeBuffer, 0, clearRuntime);
+
+    emittersBufferPtr = particlesBuffers.emittersBuffer.map();
+  }
+
+  particlesBuffers.particlesBuffers.reserve(emitters.size());
+  particlesBuffers.particlesOrderBuffers.reserve(emitters.size());
+  for (uint32_t i = 0; i < emitters.size(); ++i)
+  {
+    particlesBuffers.particlesBuffers.push_back(etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+      .size = 256 * sizeof(Particle),
+      .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
+      .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+      .name = std::format("particlesBuffer%d", i),
+    }));
+
+    particlesBuffers.particlesOrderBuffers.push_back(etna::get_context().createBuffer(etna::Buffer::CreateInfo{
+      .size = 256 * sizeof(uint32_t),
+      .bufferUsage = vk::BufferUsageFlagBits::eStorageBuffer,
+      .memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY,
+      .name = std::format("particlesOrderBuffer%d", i),
+    }));
+  }
+
+  {
+    std::vector<VkDrawIndirectCommand> drawCmds = {};
+    drawCmds.reserve(emitters.size());
+
+    for (std::uint32_t i = 0; i < emitters.size(); ++i)
+      drawCmds.push_back(VkDrawIndirectCommand{
+        .vertexCount = 6,
+        .instanceCount = 0,
+        .firstVertex = 0,
+        .firstInstance = 0,
+      });
+
+    transferHelper.uploadBuffer<VkDrawIndirectCommand>(
+      *oneShotCommands, particlesBuffers.drawCommands, 0, drawCmds);
+  }
 }
 
 

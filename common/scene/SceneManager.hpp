@@ -12,6 +12,8 @@
 #include <etna/BlockingTransferHelper.hpp>
 #include <etna/VertexInput.hpp>
 
+#include "Particles.hpp"
+
 
 struct Material
 {
@@ -72,6 +74,16 @@ struct IndirectDrawBuffers
   etna::Buffer drawMatricesIndicies;
 };
 
+struct ParticlesBuffers
+{
+  etna::Buffer emittersBuffer;
+  etna::Buffer emittersRuntimeBuffer;
+  etna::Buffer emittersOrderBuffer;
+  std::vector<etna::Buffer> particlesBuffers;
+  std::vector<etna::Buffer> particlesOrderBuffers;
+  etna::Buffer drawCommands;
+};
+
 
 class SceneManager
 {
@@ -111,6 +123,11 @@ public:
   std::vector<LightSource> &getLightSources() { return lights; }
   etna::Buffer &getLightSourcesBuffer() { return lightSourcesBuffer; }
   std::byte *getLightsBufferPtr() { return lightsBufferPtr; }
+
+  std::vector<etna::Image> &getParticleTextures() { return particleTextures; }
+  std::vector<ParticleEmitter> &getEmitters() { return emitters; }
+  ParticlesBuffers &getParticlesBuffers() { return particlesBuffers; }
+  std::byte *getEmittersBufferPtr() { return emittersBufferPtr; }
 
   etna::VertexByteStreamFormatDescription getVertexFormatDescription();
 
@@ -152,6 +169,7 @@ private:
   void createIndirectDrawBuffers();
   void createHieghtMap();
   void createLightSources();
+  void createParticleElements();
 
 
 private:
@@ -185,4 +203,9 @@ private:
   std::vector<LightSource> lights;
   etna::Buffer lightSourcesBuffer;
   std::byte *lightsBufferPtr;
+
+  std::vector<etna::Image> particleTextures;
+  std::vector<ParticleEmitter> emitters;
+  ParticlesBuffers particlesBuffers;
+  std::byte *emittersBufferPtr;
 };
