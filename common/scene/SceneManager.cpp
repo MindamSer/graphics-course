@@ -804,16 +804,21 @@ void SceneManager::createParticleElements()
         .position = {1.0f, 1.0f, -2.0f, 1.0f},
         .initialVelocity = {2.0f, 2.0f, 0.0f, 1.0f},
         .particleColor = {0.f, 1.f, 1.f, 1.f},
+        .textureId = 0,
       },
       ParticleEmitter{
         .position = {0.0f, 1.0f, -2.0f, 1.0f},
         .initialVelocity = {0.0f, 2.0f, 0.0f, 1.0f},
         .particleColor = {1.f, 0.f, 1.f, 1.f},
+        .textureId = 1,
+        .particleGravityK = 0.5f
       },
       ParticleEmitter{
         .position = {-1.0f, 1.0f, -2.0f, 1.0f},
         .initialVelocity = {-2.0f, 2.0f, 0.0f, 1.0f},
         .particleColor = {1.f, 1.f, 0.f, 1.f},
+        .textureId = 2,
+        .particleGravityK = -0.5f
       },
     };
 

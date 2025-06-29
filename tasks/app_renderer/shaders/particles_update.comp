@@ -87,7 +87,7 @@ layout(binding = 5) buffer ParticlesOrderBuffersBuffer
 
 
 const float G = -9.81f;
-shared uint visibleParticlesCount[16];
+shared uint visibleParticlesCount[4];
 
 
 
@@ -146,7 +146,7 @@ void main()
         }
 
         // initializing for culling
-        visibleParticlesCount[emitterIndex] = 0;
+        visibleParticlesCount[localEmitterIndex] = 0;
         // initializing for emitters sort
         emittersOrder[emitterIndex] = emitterIndex;
     }
@@ -218,5 +218,5 @@ void main()
 
     // filling indirect command buffer
     if (particleIndex == 0)
-        drawCommands[emitterIndex].instanceCount = visibleParticlesCount[localEmitterIndex];
+        drawCommands[emittersOrder[emitterIndex]].instanceCount = visibleParticlesCount[localEmitterIndex];
 }
